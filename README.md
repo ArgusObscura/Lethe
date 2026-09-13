@@ -1,4 +1,4 @@
-# Lethe 🔮
+# Lethe
 
 **Lethe**: A comprehensive tool for anonymizing sensitive objects (faces, license plates) in vehicle camera videos for autonomous driving R&D.
 
@@ -6,7 +6,7 @@ Named after the Greek mythological river of forgetfulness, Lethe erases identifi
 
 ---
 
-## 🎯 Project Overview
+## Project Overview
 
 ### Purpose
 
@@ -20,11 +20,11 @@ Lethe automatically detects and anonymizes these elements before videos are shar
 
 ### Key Use Cases
 
-- 🚗 **Autonomous Driving R&D** - Anonymize perception training data
-- 📊 **Dataset Curation** - Prepare public datasets from private recordings
-- 🔬 **Computer Vision Research** - Create privacy-compliant benchmark datasets
-- 🛡️ **Data Protection** - Comply with GDPR/privacy regulations
-- 🤝 **Collaborative Research** - Share data safely across organizations
+-  **Autonomous Driving R&D** - Anonymize perception training data
+-  **Dataset Curation** - Prepare public datasets from private recordings
+-  **Computer Vision Research** - Create privacy-compliant benchmark datasets
+-  **Data Protection** - Comply with GDPR/privacy regulations
+-  **Collaborative Research** - Share data safely across organizations
 
 ### Why Lethe?
 
@@ -32,36 +32,36 @@ The name comes from Greek mythology: **Lethe** is the river of forgetfulness. Th
 
 ---
 
-## ✨ Features
+##  Features
 
-### 👤 Face Detection & Anonymization
+### Face Detection & Anonymization
 - YOLOv8-face model for human face detection
 - High accuracy across lighting conditions and angles
 - Confidence-threshold configurable (default: 0.5)
 
-### 📋 License Plate Detection & Anonymization
+### License Plate Detection & Anonymization
 - YOLOv8 trained on license plate recognition
 - Supports multiple plate formats and regions
 - Fine-tuning support for custom plate types
 
-### 🎨 Multiple Anonymization Techniques
+### Multiple Anonymization Techniques
 1. **Blur** (Default) - Gaussian blur for natural appearance
 2. **Pixelate** - Block pixelation for stronger privacy
 3. **Mask** - Solid color replacement for complete obscuring
 
-### 📹 Flexible Video Support
+### Flexible Video Support
 - **Formats**: MP4 (H.264), H.265 (HEVC), AVI, MOV, MKV
 - **Resolutions**: 720p, 1080p, 4K, and any custom size
 - **Frame Sequences**: Process individual PNG/JPG frames
 - **Codec Preservation**: Maintain original codec and quality
 
-### 🚀 Multiple Deployment Options
+### Multiple Deployment Options
 - **CLI Tool** - Simple command-line interface
 - **Python Library** - Import and use in your code
 - **REST API** - HTTP service for distributed processing
 - **Batch Processing** - Process thousands of videos efficiently
 
-### ⚙️ Highly Configurable
+### Highly Configurable
 - Per-object detection settings
 - Customizable anonymization intensity
 - Flexible confidence thresholds
@@ -69,7 +69,7 @@ The name comes from Greek mythology: **Lethe** is the river of forgetfulness. Th
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -91,7 +91,7 @@ pip install -e .
 
 ### Basic Usage
 
-#### Python Library (Phase 1 - Ready Now ✅)
+#### Python Library (Phase 1 - Ready Now)
 
 ```python
 from anonymizer import AnonymizationPipeline, AnonymizationConfig
@@ -149,7 +149,7 @@ curl -X POST http://localhost:8000/anonymize \
 
 ---
 
-## 📊 Anonymization Methods
+## Anonymization Methods
 
 ### Blur (Default)
 **Best for**: Published papers, general R&D, professional appearance
@@ -195,7 +195,7 @@ config = AnonymizationConfig(
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Create a `config.yaml` file for advanced control:
 
@@ -242,7 +242,7 @@ pipeline = AnonymizationPipeline(AnonymizationConfig(**config_dict))
 
 ---
 
-## 📈 Performance
+## Performance
 
 ### Detection Speed
 | Method | GPU | CPU |
@@ -262,7 +262,7 @@ pipeline = AnonymizationPipeline(AnonymizationConfig(**config_dict))
 
 ---
 
-## 📦 Project Structure
+## Project Structure
 
 ```
 Lethe/
@@ -308,7 +308,7 @@ Lethe/
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Run All Tests
 ```bash
@@ -326,13 +326,13 @@ pytest tests/unit/test_anonymizer.py -v
 pytest tests/unit/test_video.py::TestVideoReader -v
 ```
 
-**Current Status**: 24 unit tests, all passing ✅
+**Current Status**: 24 unit tests, all passing 
 
 ---
 
-## 🛣️ Development Roadmap
+## Development Roadmap
 
-### ✅ Phase 1: Core Detection & Anonymization (COMPLETE)
+### Phase 1: Core Detection & Anonymization (COMPLETE)
 - [x] YOLOv8 face detection
 - [x] YOLOv8 license plate detection
 - [x] Blur anonymization
@@ -344,7 +344,7 @@ pytest tests/unit/test_video.py::TestVideoReader -v
 - [x] Unit tests (24 tests)
 - [x] Documentation
 
-### 🔄 Phase 2: CLI Tool (IN PROGRESS)
+### Phase 2: CLI Tool (IN PROGRESS)
 - [ ] Click/Typer CLI interface
 - [ ] Batch video processing
 - [ ] Progress bars (tqdm)
@@ -352,14 +352,14 @@ pytest tests/unit/test_video.py::TestVideoReader -v
 - [ ] Logging and debugging
 - [ ] Integration tests
 
-### 📚 Phase 3: Python Library Refinement
+### Phase 3: Python Library Refinement
 - [ ] Public API finalization
 - [ ] Event callbacks/hooks
 - [ ] Streaming support
 - [ ] Example notebooks
 - [ ] Advanced configuration guide
 
-### 🌐 Phase 4: REST API Service
+### Phase 4: REST API Service
 - [ ] FastAPI server
 - [ ] File upload/download
 - [ ] Job queue and tracking
@@ -367,7 +367,7 @@ pytest tests/unit/test_video.py::TestVideoReader -v
 - [ ] Docker containerization
 - [ ] API documentation
 
-### 🚀 Phase 5: Production Ready
+### Phase 5: Production Ready
 - [ ] Comprehensive test suite (80%+ coverage)
 - [ ] Performance optimization
 - [ ] GitHub Actions CI/CD
@@ -378,7 +378,7 @@ pytest tests/unit/test_video.py::TestVideoReader -v
 
 ---
 
-## 🔧 System Requirements
+## System Requirements
 
 - **Python**: 3.9 or higher
 - **OS**: Linux, macOS, Windows
@@ -400,7 +400,7 @@ choco install ffmpeg # Windows
 
 ---
 
-## 📖 Usage Examples
+## Usage Examples
 
 ### Example 1: Simple Face Anonymization
 ```python
@@ -441,7 +441,7 @@ print(f"Found {len(detections['license_plates'])} plates")
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
@@ -455,7 +455,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file for details.
 
@@ -475,16 +475,16 @@ If you use Lethe in your research, please cite:
 
 ---
 
-## 🆘 Support & Community
+## Support & Community
 
-- 📖 **Documentation**: See [PHASE1_SUMMARY.md](PHASE1_SUMMARY.md) for technical details
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/ArgusObscura/Lethe/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/ArgusObscura/Lethe/discussions)
-- 📧 **Email**: Contact via GitHub
+- **Documentation**: See [PHASE1_SUMMARY.md](PHASE1_SUMMARY.md) for technical details
+- **Bug Reports**: [GitHub Issues](https://github.com/ArgusObscura/Lethe/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ArgusObscura/Lethe/discussions)
+- **Email**: Contact via GitHub
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **YOLOv8** by Ultralytics for state-of-the-art object detection
 - **OpenCV** for comprehensive computer vision tools
@@ -493,7 +493,7 @@ If you use Lethe in your research, please cite:
 
 ---
 
-## ⚖️ Legal & Ethical Notes
+## Legal & Ethical Notes
 
 Lethe is designed for **legitimate research and privacy protection**. Users are responsible for:
 
@@ -506,4 +506,4 @@ Lethe is designed for **legitimate research and privacy protection**. Users are 
 
 **Remember**: *"The river Lethe makes the souls forget their past woes." — Virgil, Aeneid*
 
-Transform your sensitive footage into privacy-respecting research data. 🛡️✨
+Transform your sensitive footage into privacy-respecting research data.
