@@ -1,0 +1,27 @@
+# Default code owners - all files require approval from owner
+* @ArgusObscura
+
+# Core modules - require owner approval
+src/anonymizer/core.py @ArgusObscura
+src/anonymizer/detector.py @ArgusObscura
+src/anonymizer/anonymizer.py @ArgusObscura
+
+# Video I/O modules - require owner approval
+src/anonymizer/video/ @ArgusObscura
+
+# Configuration and models - require owner approval
+src/anonymizer/models/ @ArgusObscura
+
+# CLI - require owner approval
+src/anonymizer/cli.py @ArgusObscura
+
+# Tests - require owner approval
+tests/ @ArgusObscura
+
+# Documentation - require owner approval
+*.md @ArgusObscura
+
+# Configuration files - require owner approval
+setup.py @ArgusObscura
+requirements.txt @ArgusObscura
+pytest.ini @ArgusObscura
