@@ -4,8 +4,20 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
-from ultralytics import YOLO
-from loguru import logger
+import torch
+
+# ultralytics >= 8.3 calls torch.set_num_threads(1) when imported, which pins
+# CPU inference to a single core — measured at 3.8x slower on this workload.
+# torch refuses to change the count once parallel work has begun, so the
+# default has to be captured and restored around the import itself.
+_TORCH_THREADS = torch.get_num_threads()
+
+from ultralytics import YOLO  # noqa: E402
+
+if torch.get_num_threads() < _TORCH_THREADS:
+    torch.set_num_threads(_TORCH_THREADS)
+
+from loguru import logger  # noqa: E402
 
 
 class ModelLoader:
