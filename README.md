@@ -26,6 +26,10 @@ Lethe automatically detects and anonymizes these elements before videos are shar
 - 🛡️ **Data Protection** - Comply with GDPR/privacy regulations
 - 🤝 **Collaborative Research** - Share data safely across organizations
 
+### Why Lethe?
+
+The name comes from Greek mythology: **Lethe** is the river of forgetfulness. Those who drank from it forgot their past. Similarly, Lethe helps you "forget" (anonymize) sensitive information in your videos.
+
 ---
 
 ## ✨ Features
@@ -52,9 +56,9 @@ Lethe automatically detects and anonymizes these elements before videos are shar
 - **Codec Preservation**: Maintain original codec and quality
 
 ### 🚀 Multiple Deployment Options
-- **Python Library** - Import and use in your code (Phase 1 ✅)
-- **CLI Tool** - Simple command-line interface (Phase 2 coming)
-- **REST API** - HTTP service for distributed processing (Phase 4 planned)
+- **CLI Tool** - Simple command-line interface
+- **Python Library** - Import and use in your code
+- **REST API** - HTTP service for distributed processing
 - **Batch Processing** - Process thousands of videos efficiently
 
 ### ⚙️ Highly Configurable
@@ -85,7 +89,9 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-### Basic Usage (Python Library)
+### Basic Usage
+
+#### Python Library (Phase 1 - Ready Now ✅)
 
 ```python
 from anonymizer import AnonymizationPipeline, AnonymizationConfig
@@ -109,6 +115,38 @@ print(f"Detected {stats['faces_detected']} faces")
 print(f"Detected {stats['license_plates_detected']} license plates")
 ```
 
+#### Command Line (Phase 2 - In Development)
+
+```bash
+# Basic anonymization
+lethe process input.mp4 -o output.mp4
+
+# With custom settings
+lethe process input.mp4 \
+  -o output.mp4 \
+  --method pixelate \
+  --pixelate-size 20 \
+  --confidence 0.6
+
+# Batch processing
+lethe batch input_directory/ -o output_directory/
+
+# Configuration file
+lethe process input.mp4 -o output.mp4 --config config.yaml
+```
+
+#### REST API (Phase 4 - Planned)
+
+```bash
+# Start server
+python -m anonymizer.api.server
+
+# In another terminal
+curl -X POST http://localhost:8000/anonymize \
+  -F "video=@input.mp4" \
+  -F "method=blur"
+```
+
 ---
 
 ## 📊 Anonymization Methods
@@ -123,6 +161,10 @@ config = AnonymizationConfig(
 )
 ```
 
+- Preserves context while hiding identity
+- Natural appearance
+- Reversibility: Low (harder to reverse)
+
 ### Pixelate
 **Best for**: Strong privacy requirements, obvious anonymization
 
@@ -132,6 +174,10 @@ config = AnonymizationConfig(
     pixelate_size=15,  # Larger = larger blocks
 )
 ```
+
+- Block-based pixelation
+- More obvious anonymization
+- Reversibility: Very Low (even harder to reverse)
 
 ### Mask
 **Best for**: Maximum privacy, sensitive footage
@@ -143,6 +189,10 @@ config = AnonymizationConfig(
 )
 ```
 
+- Solid color replacement
+- Removes all visual information
+- Reversibility: None (irreversible)
+
 ---
 
 ## ⚙️ Configuration
@@ -152,28 +202,36 @@ Create a `config.yaml` file for advanced control:
 ```yaml
 anonymization:
   method: blur              # blur | pixelate | mask
-  blur_kernel_size: 31
+  blur_kernel_size: 31      # Odd numbers only
   pixelate_size: 15
   mask_color: [0, 0, 0]     # BGR color
   enable_face_detection: true
   enable_license_plate_detection: true
+  smooth_boxes: true        # Temporal smoothing
 
 detection:
   face:
     confidence_threshold: 0.5
+    iou_threshold: 0.4
     device: cpu             # cpu | cuda
     batch_size: 8
   
   license_plate:
     confidence_threshold: 0.5
+    iou_threshold: 0.4
     device: cpu
     batch_size: 8
+
+video:
+  output_format: mp4        # mp4 | avi | mov | mkv
+  crf: 23                   # 0 (best) to 51 (worst)
+  preserve_original: true   # Keep original resolution/fps
 ```
 
 Use it:
 
 ```python
-from anonymizer import AnonymizationPipeline, AnonymizationConfig
+from anonymizer import AnonymizationPipeline
 import yaml
 
 with open("config.yaml") as f:
@@ -213,6 +271,7 @@ Lethe/
 ├── requirements.txt           # Dependencies
 ├── setup.py                   # Package setup
 ├── pytest.ini                 # Test configuration
+├── PHASE1_SUMMARY.md         # Phase 1 deliverables
 │
 ├── src/anonymizer/           # Main library
 │   ├── __init__.py           # Public API
@@ -224,19 +283,27 @@ Lethe/
 │   │   ├── config.py         # Pydantic configurations
 │   │   └── loader.py         # Model loading/caching
 │   │
-│   └── video/                # Video I/O
-│       ├── reader.py         # Frame extraction
-│       ├── writer.py         # Video output
-│       └── utils.py          # Helper functions
+│   ├── video/                # Video I/O
+│   │   ├── reader.py         # Frame extraction
+│   │   ├── writer.py         # Video output
+│   │   └── utils.py          # Helper functions
+│   │
+│   ├── cli.py                # CLI interface (Phase 2)
+│   └── api/                  # REST API (Phase 4)
+│       ├── server.py
+│       └── routes.py
 │
 ├── tests/                    # Test suite
 │   ├── conftest.py          # Pytest fixtures
-│   └── unit/                # Unit tests
-│       ├── test_anonymizer.py
-│       └── test_video.py
+│   ├── unit/                # Unit tests
+│   │   ├── test_anonymizer.py
+│   │   └── test_video.py
+│   └── integration/         # Integration tests (Phase 2+)
 │
-└── examples/                # Usage examples
-    └── basic_usage.py
+├── examples/                # Usage examples
+│   └── basic_usage.py
+│
+└── docs/                    # Documentation (Phase 5)
 ```
 
 ---
@@ -251,6 +318,12 @@ pytest tests/ -v
 ### Run with Coverage
 ```bash
 pytest tests/ --cov=src/anonymizer --cov-report=html
+```
+
+### Run Specific Tests
+```bash
+pytest tests/unit/test_anonymizer.py -v
+pytest tests/unit/test_video.py::TestVideoReader -v
 ```
 
 **Current Status**: 24 unit tests, all passing ✅
@@ -271,30 +344,37 @@ pytest tests/ --cov=src/anonymizer --cov-report=html
 - [x] Unit tests (24 tests)
 - [x] Documentation
 
-### 🔄 Phase 2: CLI Tool (In Development)
+### 🔄 Phase 2: CLI Tool (IN PROGRESS)
 - [ ] Click/Typer CLI interface
 - [ ] Batch video processing
 - [ ] Progress bars (tqdm)
 - [ ] Config file support
+- [ ] Logging and debugging
 - [ ] Integration tests
 
-### 📚 Phase 3: Python Library Refinement (Planned)
+### 📚 Phase 3: Python Library Refinement
 - [ ] Public API finalization
 - [ ] Event callbacks/hooks
 - [ ] Streaming support
 - [ ] Example notebooks
+- [ ] Advanced configuration guide
 
-### 🌐 Phase 4: REST API Service (Planned)
+### 🌐 Phase 4: REST API Service
 - [ ] FastAPI server
 - [ ] File upload/download
 - [ ] Job queue and tracking
+- [ ] Async processing
 - [ ] Docker containerization
+- [ ] API documentation
 
-### 🚀 Phase 5: Production Ready (Planned)
+### 🚀 Phase 5: Production Ready
 - [ ] Comprehensive test suite (80%+ coverage)
+- [ ] Performance optimization
 - [ ] GitHub Actions CI/CD
 - [ ] Documentation site (MkDocs)
 - [ ] Release process
+- [ ] Contributing guidelines
+- [ ] Community setup
 
 ---
 
@@ -305,6 +385,18 @@ pytest tests/ --cov=src/anonymizer --cov-report=html
 - **RAM**: 4GB minimum (8GB recommended)
 - **GPU**: NVIDIA CUDA (optional, 10-100x faster)
 - **FFmpeg**: Required for optimal codec support
+
+### Optional Dependencies
+
+```bash
+# For GPU support
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# For advanced video formats
+brew install ffmpeg  # macOS
+apt install ffmpeg   # Ubuntu/Debian
+choco install ffmpeg # Windows
+```
 
 ---
 
@@ -337,7 +429,6 @@ config = AnonymizationConfig(
     enable_license_plate_detection=False,  # Skip plates
 )
 pipeline = AnonymizationPipeline(config)
-pipeline.process_video("video.mp4", "video_faces_only.mp4")
 ```
 
 ### Example 4: Detection Only (No Anonymization)
@@ -352,7 +443,7 @@ print(f"Found {len(detections['license_plates'])} plates")
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please see the contribution guidelines in future documentation.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 **Areas we need help with:**
 - [ ] Custom license plate detection models
@@ -360,6 +451,7 @@ Contributions are welcome! Please see the contribution guidelines in future docu
 - [ ] Performance optimization
 - [ ] Documentation improvements
 - [ ] Test coverage expansion
+- [ ] Real-world dataset contributions
 
 ---
 
@@ -367,14 +459,48 @@ Contributions are welcome! Please see the contribution guidelines in future docu
 
 This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file for details.
 
+### Citation
+
+If you use Lethe in your research, please cite:
+
+```bibtex
+@software{lethe2024,
+  title={Lethe: Vehicle Camera Video Anonymization Tool},
+  author={ArgusObscura},
+  url={https://github.com/ArgusObscura/Lethe},
+  year={2024},
+  note={Anonymous video processing for autonomous driving R&D}
+}
+```
+
 ---
 
-## ✨ Acknowledgments
+## 🆘 Support & Community
+
+- 📖 **Documentation**: See [PHASE1_SUMMARY.md](PHASE1_SUMMARY.md) for technical details
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/ArgusObscura/Lethe/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/ArgusObscura/Lethe/discussions)
+- 📧 **Email**: Contact via GitHub
+
+---
+
+## 🙏 Acknowledgments
 
 - **YOLOv8** by Ultralytics for state-of-the-art object detection
 - **OpenCV** for comprehensive computer vision tools
 - **FFmpeg** for reliable video codec support
 - The autonomous driving research community for feedback and use cases
+
+---
+
+## ⚖️ Legal & Ethical Notes
+
+Lethe is designed for **legitimate research and privacy protection**. Users are responsible for:
+
+1. **Compliance**: Ensuring use complies with local privacy laws (GDPR, CCPA, etc.)
+2. **Consent**: Having proper consent to process video footage
+3. **Responsible Use**: Not using for surveillance evasion or harmful purposes
+4. **Data Handling**: Securely storing both original and anonymized footage
 
 ---
 
