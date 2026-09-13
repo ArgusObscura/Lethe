@@ -47,6 +47,12 @@ htmlcov/
 .cache/
 ~/.cache/lethe/
 
+# Model weights
+*.pt
+
+# Event logs
+*_events.json
+
 # Video files (for testing)
 *.mp4
 *.avi
