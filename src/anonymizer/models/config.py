@@ -42,6 +42,17 @@ class DetectionConfig(BaseModel):
         gt=0,
         description="Batch size for detection processing"
     )
+    inference_size: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Longest edge the detector sees, in pixels (YOLO's default is 640). "
+            "Frames are scaled to this before detection, so on high-resolution "
+            "footage a low value shrinks distant faces below what the model can "
+            "resolve. Raising it finds more faces and costs proportionally more "
+            "time."
+        )
+    )
 
 
 class AnonymizationConfig(BaseModel):
@@ -64,6 +75,18 @@ class AnonymizationConfig(BaseModel):
     mask_color: tuple = Field(
         default=(0, 0, 0),
         description="RGB color for masking (black by default)"
+    )
+    track_detections: bool = Field(
+        default=True,
+        description=(
+            "Bridge frames where the detector loses a face it had found. "
+            "Without it every dropout leaks an unblurred frame."
+        )
+    )
+    track_persistence: int = Field(
+        default=10,
+        ge=0,
+        description="Frames to keep anonymizing a region after its last detection"
     )
     box_padding: float = Field(
         default=0.15,

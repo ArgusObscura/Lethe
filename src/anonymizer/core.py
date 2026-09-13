@@ -13,6 +13,7 @@ from .anonymizer import Anonymizer
 from .models.loader import ModelLoader
 from .models.config import AnonymizationConfig, DetectionConfig
 from .events import EventEmitter, EventType, Event, EventCallback
+from .tracking import DetectionTracker
 
 
 class AnonymizationPipeline:
@@ -40,6 +41,19 @@ class AnonymizationPipeline:
         )
         self.anonymizer = Anonymizer(self.config)
 
+        # Faces and plates are tracked separately so a face never inherits a
+        # plate's track, and vice versa.
+        self.face_tracker = (
+            DetectionTracker(persistence=self.config.track_persistence)
+            if self.config.track_detections
+            else None
+        )
+        self.plate_tracker = (
+            DetectionTracker(persistence=self.config.track_persistence)
+            if self.config.track_detections
+            else None
+        )
+
         self.stats = {
             "frames_processed": 0,
             "faces_detected": 0,
@@ -64,6 +78,12 @@ class AnonymizationPipeline:
         """
         self.events.on(event_type, callback)
         return self
+
+    def _reset_trackers(self) -> None:
+        """Drop tracks from a previous run so they cannot leak into this one."""
+        if self.face_tracker:
+            self.face_tracker.reset()
+            self.plate_tracker.reset()
 
     def _anonymize_with_events(
         self,
@@ -96,10 +116,17 @@ class AnonymizationPipeline:
                 detections={"license_plates": [d.to_dict() for d in lp_detections]},
             ))
 
-        detections = face_detections + lp_detections
-        self.stats["total_detections"] += len(detections)
+        self.stats["total_detections"] += len(face_detections) + len(lp_detections)
 
-        return self.anonymizer.anonymize_frame(frame, detections)
+        # Events and statistics report what the detector actually found; the
+        # regions anonymized additionally cover faces it momentarily lost.
+        if self.face_tracker:
+            face_regions = self.face_tracker.update(face_detections, frame_num)
+            lp_regions = self.plate_tracker.update(lp_detections, frame_num)
+        else:
+            face_regions, lp_regions = face_detections, lp_detections
+
+        return self.anonymizer.anonymize_frame(frame, face_regions + lp_regions)
 
     def _detect_and_anonymize(self, frame, frame_num: int):
         """Detect on a single frame, emit events, and anonymize it.
@@ -140,6 +167,7 @@ class AnonymizationPipeline:
             Dictionary with processing statistics
         """
         logger.info(f"Starting video anonymization: {input_path} -> {output_path}")
+        self._reset_trackers()
 
         # Emit pipeline started event
         self.events.emit(Event(
@@ -269,6 +297,7 @@ class AnonymizationPipeline:
             Dictionary with processing statistics.
         """
         logger.info(f"Starting stream anonymization: {source} -> {output_path}")
+        self._reset_trackers()
 
         self.events.emit(Event(
             event_type=EventType.PIPELINE_STARTED,
