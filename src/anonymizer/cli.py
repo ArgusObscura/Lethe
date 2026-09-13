@@ -12,6 +12,7 @@ from .core import AnonymizationPipeline
 from .models.config import AnonymizationConfig, AnonymizationMethod
 from .events import EventType
 from .progress import ProgressDisplay
+from .batch import BatchManager, JobStatus, JobWorker
 
 
 # Configure logging
@@ -644,6 +645,183 @@ def show_config(method: str):
     }
 
     click.echo(yaml.dump(config_dict, default_flow_style=False, sort_keys=False))
+
+
+@cli.group()
+def job():
+    """Queue videos for background processing.
+
+    Jobs persist in a local database, so you can queue work from one shell,
+    run a worker in another, and check on it later.
+
+    Examples:
+
+        lethe job queue input.mp4 -o output.mp4
+
+        lethe job worker
+
+        lethe job list
+    """
+
+
+@job.command("queue")
+@click.argument("input_video", type=click.Path(exists=True))
+@click.option("-o", "--output", type=click.Path(), required=True, help="Output video path")
+@click.option(
+    "-m", "--method",
+    type=click.Choice(["blur", "pixelate", "mask"], case_sensitive=False),
+    default="blur",
+    help="Anonymization method [default: blur]"
+)
+@click.option(
+    "--confidence",
+    type=float,
+    default=0.5,
+    help="Detection confidence threshold 0-1 [default: 0.5]"
+)
+@click.option("--faces/--no-faces", default=True, help="Enable face detection")
+@click.option("--plates/--no-plates", default=True, help="Enable license plate detection")
+@click.option(
+    "--device",
+    type=click.Choice(["cpu", "cuda"], case_sensitive=False),
+    default="cpu",
+    help="Processing device [default: cpu]"
+)
+def job_queue(
+    input_video: str,
+    output: str,
+    method: str,
+    confidence: float,
+    faces: bool,
+    plates: bool,
+    device: str,
+):
+    """Add a video to the processing queue."""
+    from .models.config import DetectionConfig
+
+    config = AnonymizationConfig(
+        method=method,
+        enable_face_detection=faces,
+        enable_license_plate_detection=plates,
+        face_config=DetectionConfig(confidence_threshold=confidence, device=device),
+        license_plate_config=DetectionConfig(confidence_threshold=confidence, device=device),
+    )
+
+    queued = BatchManager().queue_job(input_video, output, config)
+
+    click.secho(f"✅ Queued job {queued.job_id}", fg="green")
+    click.echo(f"   {input_video} → {output}")
+    click.echo(f"\nRun a worker to process it:  lethe job worker")
+
+
+@job.command("list")
+@click.option(
+    "--status",
+    type=click.Choice([s.value for s in JobStatus], case_sensitive=False),
+    help="Only show jobs in this state"
+)
+@click.option("--limit", type=int, default=20, help="Maximum jobs to show [default: 20]")
+def job_list(status: Optional[str], limit: int):
+    """List queued and completed jobs, newest first."""
+    manager = BatchManager()
+    jobs = manager.list_jobs(JobStatus(status) if status else None, limit=limit)
+
+    if not jobs:
+        click.secho("No jobs found", fg="yellow")
+        return
+
+    icons = {
+        JobStatus.QUEUED: "⏳",
+        JobStatus.RUNNING: "⚙️ ",
+        JobStatus.COMPLETED: "✅",
+        JobStatus.FAILED: "❌",
+        JobStatus.CANCELLED: "🚫",
+    }
+
+    click.echo(f"{'JOB ID':<14}{'STATUS':<12}{'PROGRESS':<11}INPUT")
+    click.echo("-" * 70)
+
+    for entry in jobs:
+        progress = f"{entry.progress:.0f}%" if entry.status == JobStatus.RUNNING else "-"
+        label = f"{icons.get(entry.status, '')} {entry.status.value}"
+        click.echo(
+            f"{entry.job_id:<14}{label:<12}{progress:<11}{Path(entry.input_path).name}"
+        )
+
+    counts = manager.counts_by_status()
+    click.echo("\n" + "  ".join(f"{k}: {v}" for k, v in sorted(counts.items())))
+
+
+@job.command("status")
+@click.argument("job_id")
+def job_status(job_id: str):
+    """Show full detail for one job, including results when finished."""
+    entry = BatchManager().get_job(job_id)
+
+    if entry is None:
+        click.secho(f"❌ No such job: {job_id}", fg="red", err=True)
+        sys.exit(1)
+
+    click.echo(f"\nJob {entry.job_id}")
+    click.echo("-" * 50)
+    click.echo(f"  Status:    {entry.status.value}")
+    click.echo(f"  Input:     {entry.input_path}")
+    click.echo(f"  Output:    {entry.output_path}")
+    click.echo(f"  Created:   {entry.created_at:%Y-%m-%d %H:%M:%S}")
+
+    if entry.status == JobStatus.RUNNING:
+        click.echo(f"  Progress:  {entry.progress:.1f}%")
+
+    if entry.duration_seconds is not None:
+        click.echo(f"  Duration:  {entry.duration_seconds:.1f}s")
+
+    if entry.stats:
+        click.echo("\n  Results:")
+        for key, value in entry.stats.items():
+            click.echo(f"    {key.replace('_', ' ').capitalize()}: {value}")
+
+    if entry.error:
+        click.secho(f"\n  Error: {entry.error}", fg="red")
+
+    click.echo()
+
+
+@job.command("cancel")
+@click.argument("job_id")
+def job_cancel(job_id: str):
+    """Cancel a queued or running job.
+
+    A running job stops at the next frame boundary, leaving a valid partial
+    output rather than a truncated file.
+    """
+    if BatchManager().cancel_job(job_id):
+        click.secho(f"🚫 Cancelled job {job_id}", fg="yellow")
+    else:
+        click.secho(
+            f"❌ Job {job_id} is missing or already finished", fg="red", err=True
+        )
+        sys.exit(1)
+
+
+@job.command("worker")
+@click.option("--once", is_flag=True, help="Process one job and exit")
+@click.option(
+    "--poll-interval",
+    type=float,
+    default=2.0,
+    help="Seconds to wait when the queue is empty [default: 2.0]"
+)
+def job_worker(once: bool, poll_interval: float):
+    """Process queued jobs. Runs until interrupted unless --once is given."""
+    worker = JobWorker(poll_interval=poll_interval)
+
+    if once:
+        if not worker.run_once():
+            click.secho("Queue is empty", fg="yellow")
+        return
+
+    click.echo("⚙️  Worker running (Ctrl-C to stop)")
+    worker.run_forever()
 
 
 def main():
