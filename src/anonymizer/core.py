@@ -41,15 +41,21 @@ class AnonymizationPipeline:
         )
         self.anonymizer = Anonymizer(self.config)
 
+        # A track must outlive the gap between detections, or skipping frames
+        # would drop every region before the next detection refreshes it.
+        persistence = max(
+            self.config.track_persistence, self.config.detect_every * 3
+        )
+
         # Faces and plates are tracked separately so a face never inherits a
         # plate's track, and vice versa.
         self.face_tracker = (
-            DetectionTracker(persistence=self.config.track_persistence)
+            DetectionTracker(persistence=persistence)
             if self.config.track_detections
             else None
         )
         self.plate_tracker = (
-            DetectionTracker(persistence=self.config.track_persistence)
+            DetectionTracker(persistence=persistence)
             if self.config.track_detections
             else None
         )
@@ -78,6 +84,37 @@ class AnonymizationPipeline:
         """
         self.events.on(event_type, callback)
         return self
+
+    def _detect_batch(self, batch):
+        """Detect over a batch, skipping frames covered by tracking.
+
+        Args:
+            batch: List of ``(frame_number, frame)`` in order.
+
+        Returns:
+            ``(faces_per_frame, plates_per_frame)``, one list per input frame.
+            Frames where detection was skipped get an empty list, which the
+            tracker fills from the surrounding detections.
+        """
+        step = self.config.detect_every
+        positions = [i for i, (num, _) in enumerate(batch) if num % step == 0]
+        frames = [batch[i][1] for i in positions]
+
+        def run(detect, enabled):
+            per_frame = [[] for _ in batch]
+            if not (enabled and frames):
+                return per_frame
+            for position, found in zip(positions, detect(frames)):
+                per_frame[position] = found
+            return per_frame
+
+        return (
+            run(self.detector.detect_faces_batch, self.config.enable_face_detection),
+            run(
+                self.detector.detect_license_plates_batch,
+                self.config.enable_license_plate_detection,
+            ),
+        )
 
     def _reset_trackers(self) -> None:
         """Drop tracks from a previous run so they cannot leak into this one."""
@@ -202,18 +239,7 @@ class AnonymizationPipeline:
                     batch_size = max(1, self.config.face_config.batch_size)
 
                     for batch in reader.read_frame_batch(batch_size):
-                        frames = [frame for _, frame in batch]
-
-                        faces_per_frame = (
-                            self.detector.detect_faces_batch(frames)
-                            if self.config.enable_face_detection
-                            else [[] for _ in frames]
-                        )
-                        plates_per_frame = (
-                            self.detector.detect_license_plates_batch(frames)
-                            if self.config.enable_license_plate_detection
-                            else [[] for _ in frames]
-                        )
+                        faces_per_frame, plates_per_frame = self._detect_batch(batch)
 
                         for (frame_num, frame), faces, plates in zip(
                             batch, faces_per_frame, plates_per_frame

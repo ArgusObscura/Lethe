@@ -135,6 +135,12 @@ def cli():
     help="Disable bridging of frames where the detector loses a face"
 )
 @click.option(
+    "--detect-every",
+    type=int,
+    default=1,
+    help="Run detection every Nth frame, tracking covers the rest [default: 1]"
+)
+@click.option(
     "--log",
     is_flag=True,
     help="Enable event logging to file"
@@ -163,6 +169,7 @@ def process(
     config: Optional[dict],
     inference_size: Optional[int],
     no_tracking: bool,
+    detect_every: int,
     log: bool,
     log_file: Optional[str],
     quiet: bool,
@@ -203,6 +210,7 @@ def process(
                 enable_face_detection=faces,
                 enable_license_plate_detection=plates,
                 track_detections=not no_tracking,
+                detect_every=detect_every,
                 face_config=DetectionConfig(
                     confidence_threshold=confidence,
                     device=device,
