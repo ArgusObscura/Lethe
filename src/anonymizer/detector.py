@@ -96,6 +96,11 @@ class ObjectDetector:
         logger.info("ObjectDetector initialized")
 
     @staticmethod
+    def _size_kwargs(config) -> dict:
+        """Inference size for a model call, omitted when left at the default."""
+        return {"imgsz": config.inference_size} if config.inference_size else {}
+
+    @staticmethod
     def _to_detections(result, class_name: str) -> List[Detection]:
         """Convert one YOLO result into Detection objects."""
         detections = []
@@ -139,7 +144,7 @@ class ObjectDetector:
         model = self._load_face_model()
 
         try:
-            results = model(frame, conf=self.config.confidence_threshold)
+            results = model(frame, conf=self.config.confidence_threshold, **self._size_kwargs(self.config))
             detections = [
                 d for result in results for d in self._to_detections(result, "face")
             ]
@@ -163,7 +168,7 @@ class ObjectDetector:
         model = self._load_face_model()
 
         try:
-            results = model(frames, conf=self.config.confidence_threshold)
+            results = model(frames, conf=self.config.confidence_threshold, **self._size_kwargs(self.config))
             return [self._to_detections(result, "face") for result in results]
 
         except Exception as e:
@@ -185,7 +190,9 @@ class ObjectDetector:
 
         try:
             results = model(
-                frames, conf=self.license_plate_config.confidence_threshold
+                frames,
+                conf=self.license_plate_config.confidence_threshold,
+                **self._size_kwargs(self.license_plate_config),
             )
             return [
                 self._to_detections(result, "license_plate") for result in results
@@ -208,7 +215,9 @@ class ObjectDetector:
 
         try:
             results = model(
-                frame, conf=self.license_plate_config.confidence_threshold
+                frame,
+                conf=self.license_plate_config.confidence_threshold,
+                **self._size_kwargs(self.license_plate_config),
             )
             detections = []
 

@@ -125,6 +125,16 @@ def cli():
     help="Configuration file (YAML)"
 )
 @click.option(
+    "--inference-size",
+    type=int,
+    help="Longest edge the detector sees [default: 640]. Raise it to catch smaller faces"
+)
+@click.option(
+    "--no-tracking",
+    is_flag=True,
+    help="Disable bridging of frames where the detector loses a face"
+)
+@click.option(
     "--log",
     is_flag=True,
     help="Enable event logging to file"
@@ -151,6 +161,8 @@ def process(
     plates: bool,
     device: str,
     config: Optional[dict],
+    inference_size: Optional[int],
+    no_tracking: bool,
     log: bool,
     log_file: Optional[str],
     quiet: bool,
@@ -190,13 +202,16 @@ def process(
                 mask_color=mask_rgb,
                 enable_face_detection=faces,
                 enable_license_plate_detection=plates,
+                track_detections=not no_tracking,
                 face_config=DetectionConfig(
                     confidence_threshold=confidence,
                     device=device,
+                    inference_size=inference_size,
                 ),
                 license_plate_config=DetectionConfig(
                     confidence_threshold=confidence,
                     device=device,
+                    inference_size=inference_size,
                 ),
             )
 
