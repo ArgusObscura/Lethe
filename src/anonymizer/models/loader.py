@@ -12,7 +12,7 @@ class ModelLoader:
     """Load and cache detection models."""
 
     # Default model paths
-    YOLOV8_FACE_MODEL = "yolov8n-face.pt"
+    YOLOV8_FACE_MODEL = "yolov8n.pt"  # Standard YOLOv8 nano for face detection
     YOLOV8_LP_MODEL = "yolov8m.pt"  # Generic YOLOv8, fine-tune for LP detection
 
     def __init__(self, cache_dir: Optional[str] = None):
