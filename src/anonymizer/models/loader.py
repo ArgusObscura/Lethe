@@ -47,14 +47,27 @@ class ModelLoader:
 
         logger.info("Loading YOLOv8-face model for face detection...")
         try:
+            # Use cache directory and set YOLO to download there
+            os.environ['YOLO_CACHE'] = str(self.cache_dir)
             model = YOLO(self.YOLOV8_FACE_MODEL)
             model.to(device)
             self._models[model_name] = model
-            logger.info("Face detector loaded successfully")
+            logger.info(f"Face detector loaded successfully from {self.cache_dir}")
             return model
         except Exception as e:
             logger.error(f"Failed to load face detector: {e}")
-            raise
+            logger.info("Trying to download model from Ultralytics hub...")
+            try:
+                # Try downloading from Ultralytics hub
+                os.environ['YOLO_CACHE'] = str(self.cache_dir)
+                model = YOLO(self.YOLOV8_FACE_MODEL)
+                model.to(device)
+                self._models[model_name] = model
+                logger.info("Face detector downloaded and loaded successfully")
+                return model
+            except Exception as e2:
+                logger.error(f"Failed to download face detector: {e2}")
+                raise
 
     def load_license_plate_detector(self, device: str = "cpu") -> YOLO:
         """Load YOLOv8 model for license plate detection.
@@ -72,11 +85,12 @@ class ModelLoader:
 
         logger.info("Loading YOLOv8 model for license plate detection...")
         try:
-            # Using generic YOLOv8 - can be fine-tuned with custom LP data
+            # Use cache directory and set YOLO to download there
+            os.environ['YOLO_CACHE'] = str(self.cache_dir)
             model = YOLO(self.YOLOV8_LP_MODEL)
             model.to(device)
             self._models[model_name] = model
-            logger.info("License plate detector loaded successfully")
+            logger.info(f"License plate detector loaded successfully from {self.cache_dir}")
             return model
         except Exception as e:
             logger.error(f"Failed to load license plate detector: {e}")
