@@ -65,6 +65,14 @@ class AnonymizationConfig(BaseModel):
         default=(0, 0, 0),
         description="RGB color for masking (black by default)"
     )
+    box_padding: float = Field(
+        default=0.15,
+        ge=0.0,
+        description=(
+            "Fraction to expand each detection box before anonymizing. "
+            "Detectors return tight boxes that leave hair and jaw edges exposed."
+        )
+    )
 
     # Detection-specific configs
     face_config: DetectionConfig = Field(

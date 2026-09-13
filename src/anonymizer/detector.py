@@ -72,20 +72,60 @@ class Detection:
 class ObjectDetector:
     """Detect faces and license plates in images."""
 
-    def __init__(self, model_loader: ModelLoader, config: DetectionConfig):
+    def __init__(
+        self,
+        model_loader: ModelLoader,
+        config: DetectionConfig,
+        license_plate_config: Optional[DetectionConfig] = None,
+    ):
         """Initialize detector.
 
         Args:
             model_loader: ModelLoader instance
-            config: Detection configuration
+            config: Detection configuration for faces
+            license_plate_config: Detection configuration for license plates.
+                Falls back to ``config`` when not given.
         """
         self.loader = model_loader
         self.config = config
+        self.license_plate_config = license_plate_config or config
 
         self.face_model = None
         self.lp_model = None
 
         logger.info("ObjectDetector initialized")
+
+    @staticmethod
+    def _to_detections(result, class_name: str) -> List[Detection]:
+        """Convert one YOLO result into Detection objects."""
+        detections = []
+
+        for box in result.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+            detections.append(
+                Detection(
+                    x1=int(x1),
+                    y1=int(y1),
+                    x2=int(x2),
+                    y2=int(y2),
+                    confidence=float(box.conf[0].cpu().numpy()),
+                    class_name=class_name,
+                )
+            )
+
+        return detections
+
+    def _load_face_model(self):
+        if self.face_model is None:
+            self.face_model = self.loader.load_face_detector(self.config.device)
+        return self.face_model
+
+    def _load_lp_model(self):
+        if self.lp_model is None:
+            self.lp_model = self.loader.load_license_plate_detector(
+                self.license_plate_config.device
+            )
+        return self.lp_model
 
     def detect_faces(self, frame: np.ndarray) -> List[Detection]:
         """Detect faces in frame.
@@ -96,27 +136,13 @@ class ObjectDetector:
         Returns:
             List of Detection objects
         """
-        if self.face_model is None:
-            self.face_model = self.loader.load_face_detector(self.config.device)
+        model = self._load_face_model()
 
         try:
-            results = self.face_model(frame, conf=self.config.confidence_threshold)
-            detections = []
-
-            for result in results:
-                for box in result.boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    confidence = float(box.conf[0].cpu().numpy())
-
-                    detection = Detection(
-                        x1=int(x1),
-                        y1=int(y1),
-                        x2=int(x2),
-                        y2=int(y2),
-                        confidence=confidence,
-                        class_name="face",
-                    )
-                    detections.append(detection)
+            results = model(frame, conf=self.config.confidence_threshold)
+            detections = [
+                d for result in results for d in self._to_detections(result, "face")
+            ]
 
             logger.debug(f"Detected {len(detections)} faces")
             return detections
@@ -124,6 +150,50 @@ class ObjectDetector:
         except Exception as e:
             logger.error(f"Face detection failed: {e}")
             return []
+
+    def detect_faces_batch(self, frames: List[np.ndarray]) -> List[List[Detection]]:
+        """Detect faces across several frames in one forward pass.
+
+        Args:
+            frames: Input frames (BGR)
+
+        Returns:
+            One list of Detections per input frame, in the same order.
+        """
+        model = self._load_face_model()
+
+        try:
+            results = model(frames, conf=self.config.confidence_threshold)
+            return [self._to_detections(result, "face") for result in results]
+
+        except Exception as e:
+            logger.error(f"Batched face detection failed: {e}")
+            return [[] for _ in frames]
+
+    def detect_license_plates_batch(
+        self, frames: List[np.ndarray]
+    ) -> List[List[Detection]]:
+        """Detect license plates across several frames in one forward pass.
+
+        Args:
+            frames: Input frames (BGR)
+
+        Returns:
+            One list of Detections per input frame, in the same order.
+        """
+        model = self._load_lp_model()
+
+        try:
+            results = model(
+                frames, conf=self.license_plate_config.confidence_threshold
+            )
+            return [
+                self._to_detections(result, "license_plate") for result in results
+            ]
+
+        except Exception as e:
+            logger.error(f"Batched license plate detection failed: {e}")
+            return [[] for _ in frames]
 
     def detect_license_plates(self, frame: np.ndarray) -> List[Detection]:
         """Detect license plates in frame.
@@ -134,11 +204,12 @@ class ObjectDetector:
         Returns:
             List of Detection objects
         """
-        if self.lp_model is None:
-            self.lp_model = self.loader.load_license_plate_detector(self.config.device)
+        model = self._load_lp_model()
 
         try:
-            results = self.lp_model(frame, conf=self.config.confidence_threshold)
+            results = model(
+                frame, conf=self.license_plate_config.confidence_threshold
+            )
             detections = []
 
             for result in results:

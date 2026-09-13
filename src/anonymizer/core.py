@@ -33,7 +33,11 @@ class AnonymizationPipeline:
         self.use_ffmpeg = use_ffmpeg
 
         self.model_loader = ModelLoader()
-        self.detector = ObjectDetector(self.model_loader, self.config.face_config)
+        self.detector = ObjectDetector(
+            self.model_loader,
+            self.config.face_config,
+            self.config.license_plate_config,
+        )
         self.anonymizer = Anonymizer(self.config)
 
         self.stats = {
@@ -61,43 +65,63 @@ class AnonymizationPipeline:
         self.events.on(event_type, callback)
         return self
 
-    def _detect_and_anonymize(self, frame, frame_num: int):
-        """Run detection on a frame, emit detection events, and anonymize it.
+    def _anonymize_with_events(
+        self,
+        frame,
+        frame_num: int,
+        face_detections: list,
+        lp_detections: list,
+    ):
+        """Emit detection events for already-computed detections and anonymize.
 
         Returns:
             The anonymized frame.
         """
-        detections = []
+        self.stats["faces_detected"] += len(face_detections)
+        self.stats["license_plates_detected"] += len(lp_detections)
 
-        if self.config.enable_face_detection:
-            face_detections = self.detector.detect_faces(frame)
-            detections.extend(face_detections)
-            self.stats["faces_detected"] += len(face_detections)
+        if face_detections:
+            self.events.emit(Event(
+                event_type=EventType.FACES_DETECTED,
+                timestamp=datetime.now(),
+                frame_number=frame_num,
+                detections={"faces": [d.to_dict() for d in face_detections]},
+            ))
 
-            if face_detections:
-                self.events.emit(Event(
-                    event_type=EventType.FACES_DETECTED,
-                    timestamp=datetime.now(),
-                    frame_number=frame_num,
-                    detections={"faces": [d.to_dict() for d in face_detections]},
-                ))
+        if lp_detections:
+            self.events.emit(Event(
+                event_type=EventType.PLATES_DETECTED,
+                timestamp=datetime.now(),
+                frame_number=frame_num,
+                detections={"license_plates": [d.to_dict() for d in lp_detections]},
+            ))
 
-        if self.config.enable_license_plate_detection:
-            lp_detections = self.detector.detect_license_plates(frame)
-            detections.extend(lp_detections)
-            self.stats["license_plates_detected"] += len(lp_detections)
-
-            if lp_detections:
-                self.events.emit(Event(
-                    event_type=EventType.PLATES_DETECTED,
-                    timestamp=datetime.now(),
-                    frame_number=frame_num,
-                    detections={"license_plates": [d.to_dict() for d in lp_detections]},
-                ))
-
+        detections = face_detections + lp_detections
         self.stats["total_detections"] += len(detections)
 
         return self.anonymizer.anonymize_frame(frame, detections)
+
+    def _detect_and_anonymize(self, frame, frame_num: int):
+        """Detect on a single frame, emit events, and anonymize it.
+
+        Used by the streaming path, where buffering frames into a batch would
+        add latency to a live feed.
+
+        Returns:
+            The anonymized frame.
+        """
+        faces = (
+            self.detector.detect_faces(frame)
+            if self.config.enable_face_detection
+            else []
+        )
+        plates = (
+            self.detector.detect_license_plates(frame)
+            if self.config.enable_license_plate_detection
+            else []
+        )
+
+        return self._anonymize_with_events(frame, frame_num, faces, plates)
 
     def process_video(
         self,
@@ -143,37 +167,62 @@ class AnonymizationPipeline:
                     reader.fps,
                     reader.width,
                     reader.height,
-                    crf=self.config.face_config.batch_size if hasattr(self.config, 'crf') else 23,
                 ) as writer:
 
-                    for frame_num, frame in reader.read_frames():
-                        # Emit frame start event
-                        self.events.emit(Event(
-                            event_type=EventType.FRAME_START,
-                            timestamp=datetime.now(),
-                            frame_number=frame_num,
-                            total_frames=reader.frame_count,
-                        ))
+                    # Detection dominates runtime, and one forward pass over
+                    # several frames is measurably faster than one per frame.
+                    batch_size = max(1, self.config.face_config.batch_size)
 
-                        anonymized_frame = self._detect_and_anonymize(frame, frame_num)
+                    for batch in reader.read_frame_batch(batch_size):
+                        frames = [frame for _, frame in batch]
 
-                        # Write frame
-                        writer.write_frame(anonymized_frame)
+                        faces_per_frame = (
+                            self.detector.detect_faces_batch(frames)
+                            if self.config.enable_face_detection
+                            else [[] for _ in frames]
+                        )
+                        plates_per_frame = (
+                            self.detector.detect_license_plates_batch(frames)
+                            if self.config.enable_license_plate_detection
+                            else [[] for _ in frames]
+                        )
 
-                        # Update stats and progress
-                        self.stats["frames_processed"] += 1
+                        for (frame_num, frame), faces, plates in zip(
+                            batch, faces_per_frame, plates_per_frame
+                        ):
+                            # Emit frame start event
+                            self.events.emit(Event(
+                                event_type=EventType.FRAME_START,
+                                timestamp=datetime.now(),
+                                frame_number=frame_num,
+                                total_frames=reader.frame_count,
+                            ))
 
-                        if progress_callback:
-                            progress_callback(frame_num, reader.frame_count)
+                            anonymized_frame = self._anonymize_with_events(
+                                frame, frame_num, faces, plates
+                            )
 
-                        # Emit frame completed event
-                        self.events.emit(Event(
-                            event_type=EventType.FRAME_COMPLETED,
-                            timestamp=datetime.now(),
-                            frame_number=frame_num,
-                            total_frames=reader.frame_count,
-                            progress=(frame_num / reader.frame_count) * 100,
-                        ))
+                            # Write frame
+                            writer.write_frame(anonymized_frame)
+
+                            # Update stats and progress
+                            self.stats["frames_processed"] += 1
+
+                            if progress_callback:
+                                progress_callback(frame_num, reader.frame_count)
+
+                            # Emit frame completed event
+                            self.events.emit(Event(
+                                event_type=EventType.FRAME_COMPLETED,
+                                timestamp=datetime.now(),
+                                frame_number=frame_num,
+                                total_frames=reader.frame_count,
+                                progress=(
+                                    (frame_num / reader.frame_count) * 100
+                                    if reader.frame_count
+                                    else None
+                                ),
+                            ))
 
             logger.info(f"Video processing complete. Output: {output_path}")
             logger.info(f"Statistics: {self.stats}")
