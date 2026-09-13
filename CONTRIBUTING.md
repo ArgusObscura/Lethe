@@ -303,8 +303,8 @@ Code should be self-documenting, but also:
 
 Feel free to ask questions:
 
-- 💬 [GitHub Discussions](https://github.com/ArgusObscura/Lethe/discussions)
-- 🐛 [GitHub Issues](https://github.com/ArgusObscura/Lethe/issues)
+-  [GitHub Discussions](https://github.com/ArgusObscura/Lethe/discussions)
+-  [GitHub Issues](https://github.com/ArgusObscura/Lethe/issues)
 
 ---
 
