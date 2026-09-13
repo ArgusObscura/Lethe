@@ -29,8 +29,7 @@ def download_yolov8_face():
     print("⏳ Downloading yolov8n-face.pt...")
     print("   This may take a minute or two...\n")
 
-    # Download from GitHub releases
-    url = "https://github.com/derronqi/yolov8-face/releases/download/v0.0.0/yolov8n-face.pt"
+    url = "https://huggingface.co/arnabdhar/YOLOv8-Face-Detection/resolve/main/model.pt"
 
     try:
         # Download with progress
@@ -56,18 +55,8 @@ def download_yolov8_face():
 
     except Exception as e:
         print(f"\n\n❌ Download failed: {e}")
-        print("\nTrying alternative download location...")
-
-        # Try alternative
-        alt_url = "https://huggingface.co/Bingsu/yolov8-face/resolve/main/yolov8n-face.pt"
-        try:
-            urllib.request.urlretrieve(alt_url, model_path, download_progress)
-            print(f"\n\n✅ Model downloaded from alternative source!")
-            return True
-        except Exception as e2:
-            print(f"\n\n❌ Both downloads failed: {e2}")
-            print("\nFallback: Using standard YOLOv8n (less accurate for faces)")
-            return False
+        print(f"\nDownload {url} manually and save it to:\n   {model_path}\n")
+        return False
 
 if __name__ == "__main__":
     success = download_yolov8_face()
