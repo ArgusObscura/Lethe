@@ -12,7 +12,7 @@ class ModelLoader:
     """Load and cache detection models."""
 
     # Default model paths
-    YOLOV8_FACE_MODEL = "yolov8n.pt"  # Standard YOLOv8 nano for face detection
+    YOLOV8_FACE_MODEL = "yolov8n-face.pt"  # Specialized YOLOv8 for face detection
     YOLOV8_LP_MODEL = "yolov8m.pt"  # Generic YOLOv8, fine-tune for LP detection
 
     def __init__(self, cache_dir: Optional[str] = None):
@@ -46,28 +46,33 @@ class ModelLoader:
             return self._models[model_name]
 
         logger.info("Loading YOLOv8-face model for face detection...")
+
+        # Check if model exists in cache directory
+        model_path = self.cache_dir / self.YOLOV8_FACE_MODEL
+
+        if model_path.exists():
+            logger.info(f"Found cached model: {model_path}")
+            try:
+                model = YOLO(str(model_path))
+                model.to(device)
+                self._models[model_name] = model
+                logger.info("Face detector loaded successfully from cache")
+                return model
+            except Exception as e:
+                logger.error(f"Failed to load cached model: {e}")
+
+        # Try loading from current directory or download
         try:
-            # Use cache directory and set YOLO to download there
             os.environ['YOLO_CACHE'] = str(self.cache_dir)
             model = YOLO(self.YOLOV8_FACE_MODEL)
             model.to(device)
             self._models[model_name] = model
-            logger.info(f"Face detector loaded successfully from {self.cache_dir}")
+            logger.info(f"Face detector loaded successfully")
             return model
         except Exception as e:
             logger.error(f"Failed to load face detector: {e}")
-            logger.info("Trying to download model from Ultralytics hub...")
-            try:
-                # Try downloading from Ultralytics hub
-                os.environ['YOLO_CACHE'] = str(self.cache_dir)
-                model = YOLO(self.YOLOV8_FACE_MODEL)
-                model.to(device)
-                self._models[model_name] = model
-                logger.info("Face detector downloaded and loaded successfully")
-                return model
-            except Exception as e2:
-                logger.error(f"Failed to download face detector: {e2}")
-                raise
+            logger.info("Download the model using: python3 download_models.py")
+            raise
 
     def load_license_plate_detector(self, device: str = "cpu") -> YOLO:
         """Load YOLOv8 model for license plate detection.
