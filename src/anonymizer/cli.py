@@ -10,6 +10,8 @@ from loguru import logger
 
 from .core import AnonymizationPipeline
 from .models.config import AnonymizationConfig, AnonymizationMethod
+from .events import EventType
+from .cli import ProgressDisplay
 
 
 # Configure logging
@@ -122,6 +124,16 @@ def cli():
     help="Configuration file (YAML)"
 )
 @click.option(
+    "--log",
+    is_flag=True,
+    help="Enable event logging to file"
+)
+@click.option(
+    "--log-file",
+    type=click.Path(),
+    help="Custom event log file path"
+)
+@click.option(
     "-q", "--quiet",
     is_flag=True,
     help="Suppress progress output"
@@ -138,6 +150,8 @@ def process(
     plates: bool,
     device: str,
     config: Optional[dict],
+    log: bool,
+    log_file: Optional[str],
     quiet: bool,
 ):
     """Process a single video and anonymize sensitive objects.
@@ -196,24 +210,35 @@ def process(
         # Initialize pipeline
         pipeline = AnonymizationPipeline(anonymization_config)
 
+        # Determine log file path
+        log_output = None
+        if log or log_file:
+            log_output = log_file or f"processing_{Path(input_video).stem}.log"
+
+        # Create progress display
+        progress = ProgressDisplay(
+            total_frames=0,  # Will be updated when video opens
+            output_file=log_output,
+            quiet=quiet
+        )
+
+        # Register event callbacks
+        pipeline.on(EventType.PIPELINE_STARTED, progress.on_pipeline_started)
+        pipeline.on(EventType.VIDEO_OPENED, progress.on_video_opened)
+        pipeline.on(EventType.FRAME_COMPLETED, progress.on_frame_completed)
+        pipeline.on(EventType.FACES_DETECTED, progress.on_faces_detected)
+        pipeline.on(EventType.PLATES_DETECTED, progress.on_plates_detected)
+        pipeline.on(EventType.PIPELINE_COMPLETED, progress.on_pipeline_completed)
+        pipeline.on(EventType.PIPELINE_FAILED, progress.on_pipeline_failed)
+
         # Process video
-        with click.progressbar(length=100, label="Processing", show_pos=True, show_eta=True) as bar:
-            def progress_callback(current, total):
-                if not quiet:
-                    bar.update(int((current / total) * 100) - bar.pos)
+        stats = pipeline.process_video(input_video, output)
 
-            stats = pipeline.process_video(input_video, output, progress_callback)
+        # Show summary
+        progress.print_summary()
 
-        # Show results
-        click.echo()
-        click.secho("✅ Processing Complete!", fg="green", bold=True)
-        click.echo()
-        click.echo(f"📊 Statistics:")
-        click.echo(f"  • Frames processed: {stats['frames_processed']}")
-        click.echo(f"  • Faces detected: {stats['faces_detected']}")
-        click.echo(f"  • License plates detected: {stats['license_plates_detected']}")
-        click.echo(f"  • Total objects anonymized: {stats['total_detections']}")
-        click.echo()
+        if not quiet and log_output:
+            click.secho(f"📝 Event log: {log_output}", fg="cyan")
 
         pipeline.cleanup()
 
