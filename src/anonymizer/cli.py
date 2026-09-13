@@ -249,6 +249,154 @@ def process(
 
 
 @cli.command()
+@click.argument("source")
+@click.option(
+    "-o", "--output",
+    type=click.Path(),
+    required=True,
+    help="Output video path"
+)
+@click.option(
+    "-m", "--method",
+    type=click.Choice(["blur", "pixelate", "mask"], case_sensitive=False),
+    default="blur",
+    help="Anonymization method [default: blur]"
+)
+@click.option(
+    "--max-frames",
+    type=int,
+    help="Stop after this many frames"
+)
+@click.option(
+    "--max-seconds",
+    type=float,
+    help="Stop after this many seconds"
+)
+@click.option(
+    "--confidence",
+    type=float,
+    default=0.5,
+    help="Detection confidence threshold 0-1 [default: 0.5]"
+)
+@click.option(
+    "--faces/--no-faces",
+    default=True,
+    help="Enable face detection [default: enabled]"
+)
+@click.option(
+    "--plates/--no-plates",
+    default=True,
+    help="Enable license plate detection [default: enabled]"
+)
+@click.option(
+    "--device",
+    type=click.Choice(["cpu", "cuda"], case_sensitive=False),
+    default="cpu",
+    help="Processing device [default: cpu]"
+)
+@click.option(
+    "--log",
+    is_flag=True,
+    help="Enable event logging to file"
+)
+@click.option(
+    "--log-file",
+    type=click.Path(),
+    help="Custom event log file path"
+)
+@click.option(
+    "-q", "--quiet",
+    is_flag=True,
+    help="Suppress progress output"
+)
+def stream(
+    source: str,
+    output: str,
+    method: str,
+    max_frames: Optional[int],
+    max_seconds: Optional[float],
+    confidence: float,
+    faces: bool,
+    plates: bool,
+    device: str,
+    log: bool,
+    log_file: Optional[str],
+    quiet: bool,
+):
+    """Anonymize a live or networked video stream.
+
+    SOURCE may be a webcam (webcam://0), an RTSP or HTTP URL, or a file path.
+    A live stream runs until interrupted with Ctrl-C unless you bound it with
+    --max-frames or --max-seconds; the output is finalized either way.
+
+    Examples:
+
+        lethe stream webcam://0 -o output.mp4 --max-seconds 30
+
+        lethe stream rtsp://camera.local/stream -o output.mp4
+
+        lethe stream http://localhost:8000/mjpeg -o output.mp4 --max-frames 500
+    """
+    try:
+        from .models.config import DetectionConfig
+
+        anonymization_config = AnonymizationConfig(
+            method=method,
+            enable_face_detection=faces,
+            enable_license_plate_detection=plates,
+            face_config=DetectionConfig(
+                confidence_threshold=confidence,
+                device=device,
+            ),
+            license_plate_config=DetectionConfig(
+                confidence_threshold=confidence,
+                device=device,
+            ),
+        )
+
+        click.echo(f"📡 Source: {source}", err=True)
+        click.echo(f"📹 Output: {output}", err=True)
+        click.echo(f"🎨 Method: {anonymization_config.method}", err=True)
+        click.echo()
+
+        pipeline = AnonymizationPipeline(anonymization_config)
+
+        log_output = None
+        if log or log_file:
+            log_output = log_file or "stream_events.log"
+
+        progress = ProgressDisplay(
+            total_frames=0,
+            output_file=log_output,
+            quiet=quiet
+        )
+
+        pipeline.on(EventType.PIPELINE_STARTED, progress.on_pipeline_started)
+        pipeline.on(EventType.STREAM_OPENED, progress.on_stream_opened)
+        pipeline.on(EventType.FRAME_COMPLETED, progress.on_frame_completed)
+        pipeline.on(EventType.FACES_DETECTED, progress.on_faces_detected)
+        pipeline.on(EventType.PLATES_DETECTED, progress.on_plates_detected)
+        pipeline.on(EventType.PIPELINE_COMPLETED, progress.on_pipeline_completed)
+        pipeline.on(EventType.PIPELINE_FAILED, progress.on_pipeline_failed)
+
+        pipeline.process_stream(
+            source,
+            output,
+            max_frames=max_frames,
+            max_seconds=max_seconds,
+        )
+
+        progress.print_summary()
+
+        pipeline.cleanup()
+
+    except Exception as e:
+        click.secho(f"❌ Error: {e}", fg="red", err=True)
+        logger.exception("Stream processing failed")
+        sys.exit(1)
+
+
+@cli.command()
 @click.argument("input_directory", type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option(
     "-o", "--output",
