@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 from tqdm import tqdm
 from loguru import logger
 
-from anonymizer.events import Event, EventType
+from .events import Event
 
 
 class ProgressDisplay:
@@ -53,14 +53,19 @@ class ProgressDisplay:
 
         if not self.quiet:
             print("\n🚀 Pipeline started")
-            print(f"📊 Processing {self.total_frames} frames...")
 
     def on_video_opened(self, event: Event) -> None:
         """Handle video opened event."""
         self._log_event(event)
 
-        if not self.quiet and event.total_frames:
-            print(f"📹 Video: {event.total_frames} frames @ {event.metadata.get('fps', 'unknown')} fps")
+        if not event.total_frames:
+            return
+
+        self.total_frames = event.total_frames
+
+        if not self.quiet:
+            fps = (event.metadata or {}).get("fps", "unknown")
+            print(f"📹 Video: {event.total_frames} frames @ {fps} fps")
 
             # Create progress bar
             self.pbar = tqdm(
@@ -164,8 +169,6 @@ class ProgressDisplay:
         """Print final processing summary."""
         if self.quiet:
             return
-
-        duration = (self.events[-1].get("timestamp") if self.events else None)
 
         print("\n" + "=" * 70)
         print("✅ PROCESSING COMPLETE")

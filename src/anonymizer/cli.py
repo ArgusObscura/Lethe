@@ -11,7 +11,7 @@ from loguru import logger
 from .core import AnonymizationPipeline
 from .models.config import AnonymizationConfig, AnonymizationMethod
 from .events import EventType
-from .cli import ProgressDisplay
+from .progress import ProgressDisplay
 
 
 # Configure logging
