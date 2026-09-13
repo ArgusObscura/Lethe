@@ -113,8 +113,13 @@ class AnonymizationConfig(BaseModel):
         description="Enable face detection and anonymization"
     )
     enable_license_plate_detection: bool = Field(
-        default=True,
-        description="Enable license plate detection and anonymization"
+        default=False,
+        description=(
+            "Enable license plate detection and anonymization. Off by default: "
+            "the bundled detector is a general-purpose model with no plate "
+            "class, so enabling it anonymizes every object it recognizes "
+            "rather than plates."
+        )
     )
     smooth_boxes: bool = Field(
         default=True,

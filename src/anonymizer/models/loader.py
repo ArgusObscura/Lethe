@@ -74,6 +74,17 @@ class ModelLoader:
             logger.info("Download the model using: python3 download_models.py")
             raise
 
+    @staticmethod
+    def _detects_license_plates(model: YOLO) -> bool:
+        """Whether a model actually has a license plate class.
+
+        A general-purpose detector returns cars, people and traffic lights,
+        all of which the pipeline would then anonymize as if they were plates.
+        """
+        return any(
+            "plate" in name.lower() for name in getattr(model, "names", {}).values()
+        )
+
     def load_license_plate_detector(self, device: str = "cpu") -> YOLO:
         """Load YOLOv8 model for license plate detection.
 
@@ -95,7 +106,16 @@ class ModelLoader:
             model = YOLO(self.YOLOV8_LP_MODEL)
             model.to(device)
             self._models[model_name] = model
-            logger.info(f"License plate detector loaded successfully from {self.cache_dir}")
+
+            if not self._detects_license_plates(model):
+                logger.warning(
+                    f"{self.YOLOV8_LP_MODEL} has no license plate class, so every "
+                    f"object it detects ({', '.join(list(model.names.values())[:4])}, "
+                    f"...) will be anonymized as a plate. Point "
+                    f"license_plate_model at a plate detector, or disable plate "
+                    f"detection."
+                )
+
             return model
         except Exception as e:
             logger.error(f"Failed to load license plate detector: {e}")
