@@ -110,8 +110,8 @@ def cli():
 )
 @click.option(
     "--plates/--no-plates",
-    default=False,
-    help="Enable license plate detection [default: disabled - see --help notes]"
+    default=True,
+    help="Enable license plate detection [default: enabled]"
 )
 @click.option(
     "--device",
@@ -301,8 +301,8 @@ def process(
 )
 @click.option(
     "--plates/--no-plates",
-    default=False,
-    help="Enable license plate detection [default: disabled - see --help notes]"
+    default=True,
+    help="Enable license plate detection [default: enabled]"
 )
 @click.option(
     "--device",
@@ -698,7 +698,7 @@ def job():
     help="Detection confidence threshold 0-1 [default: 0.5]"
 )
 @click.option("--faces/--no-faces", default=True, help="Enable face detection")
-@click.option("--plates/--no-plates", default=False, help="Enable license plate detection")
+@click.option("--plates/--no-plates", default=True, help="Enable license plate detection")
 @click.option(
     "--device",
     type=click.Choice(["cpu", "cuda"], case_sensitive=False),
