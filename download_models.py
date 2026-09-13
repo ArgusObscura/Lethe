@@ -1,63 +1,90 @@
 #!/usr/bin/env python3
-"""Download YOLOv8-face model to cache directory."""
+"""Download the detection models Lethe needs into its cache directory."""
 
-import os
 import sys
 from pathlib import Path
 import urllib.request
 import shutil
 
-def download_yolov8_face():
-    """Download YOLOv8-face model."""
 
-    cache_dir = Path.home() / ".cache" / "lethe" / "models"
-    cache_dir.mkdir(parents=True, exist_ok=True)
+CACHE_DIR = Path.home() / ".cache" / "lethe" / "models"
 
-    model_path = cache_dir / "yolov8n-face.pt"
+MODELS = {
+    "yolov8n-face.pt": (
+        "https://huggingface.co/arnabdhar/YOLOv8-Face-Detection/resolve/main/model.pt",
+        "face detection",
+    ),
+    "license-plate.pt": (
+        "https://huggingface.co/morsetechlab/yolov11-license-plate-detection"
+        "/resolve/main/license-plate-finetune-v1n.pt",
+        "license plate detection",
+    ),
+}
 
-    print("\n" + "="*70)
-    print("📥 YOLOv8-Face Model Downloader")
-    print("="*70)
-    print(f"📍 Cache directory: {cache_dir}")
-    print(f"📦 Model path: {model_path}\n")
+
+def progress(block_num, block_size, total_size):
+    downloaded = block_num * block_size
+    percent = min(downloaded * 100 / total_size, 100) if total_size > 0 else 0
+    filled = int(50 * percent / 100)
+    bar = "█" * filled + "░" * (50 - filled)
+    sys.stdout.write(
+        f"\r[{bar}] {percent:.1f}% "
+        f"({downloaded/(1024*1024):.1f}/{total_size/(1024*1024):.1f} MB)"
+    )
+    sys.stdout.flush()
+
+
+def download(filename: str, url: str, purpose: str) -> bool:
+    """Fetch one model, skipping it if already cached."""
+    model_path = CACHE_DIR / filename
+
+    print(f"\n📦 {filename}  ({purpose})")
 
     if model_path.exists():
-        print(f"✅ Model already exists: {model_path}")
-        print(f"   Size: {model_path.stat().st_size / (1024*1024):.1f} MB")
+        print(f"   ✅ already present, {model_path.stat().st_size/(1024*1024):.1f} MB")
         return True
 
-    print("⏳ Downloading yolov8n-face.pt...")
-    print("   This may take a minute or two...\n")
+    print(f"   ⏳ downloading...")
 
-    url = "https://huggingface.co/arnabdhar/YOLOv8-Face-Detection/resolve/main/model.pt"
-
+    # Download to a temporary name so an interrupted transfer cannot leave a
+    # truncated file that later looks cached.
+    temp_path = CACHE_DIR / f"{filename}.tmp"
     try:
-        # Download with progress
-        def download_progress(block_num, block_size, total_size):
-            downloaded = block_num * block_size
-            percent = min(downloaded * 100 / total_size, 100)
-            bar_length = 50
-            filled = int(bar_length * percent / 100)
-            bar = "█" * filled + "░" * (bar_length - filled)
-            sys.stdout.write(f"\r[{bar}] {percent:.1f}% ({downloaded/(1024*1024):.1f}/{total_size/(1024*1024):.1f} MB)")
-            sys.stdout.flush()
-
-        temp_path = cache_dir / "yolov8n-face.pt.tmp"
-        urllib.request.urlretrieve(url, temp_path, download_progress)
-
-        # Move to final location
+        urllib.request.urlretrieve(url, temp_path, progress)
         shutil.move(str(temp_path), str(model_path))
-
-        print(f"\n\n✅ Model downloaded successfully!")
-        print(f"   Size: {model_path.stat().st_size / (1024*1024):.1f} MB")
-        print(f"   Location: {model_path}\n")
+        print(f"\n   ✅ saved, {model_path.stat().st_size/(1024*1024):.1f} MB")
         return True
-
     except Exception as e:
-        print(f"\n\n❌ Download failed: {e}")
-        print(f"\nDownload {url} manually and save it to:\n   {model_path}\n")
+        temp_path.unlink(missing_ok=True)
+        print(f"\n   ❌ failed: {e}")
+        print(f"      Download {url}")
+        print(f"      and save it as {model_path}")
         return False
 
+
+def main() -> int:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    print("\n" + "=" * 70)
+    print("📥 Lethe model downloader")
+    print("=" * 70)
+    print(f"📍 Cache directory: {CACHE_DIR}")
+
+    results = {
+        name: download(name, url, purpose)
+        for name, (url, purpose) in MODELS.items()
+    }
+
+    print("\n" + "=" * 70)
+    failed = [name for name, ok in results.items() if not ok]
+    if failed:
+        print(f"❌ {len(failed)} of {len(results)} models unavailable: {', '.join(failed)}")
+    else:
+        print(f"✅ All {len(results)} models ready")
+    print("=" * 70 + "\n")
+
+    return 1 if failed else 0
+
+
 if __name__ == "__main__":
-    success = download_yolov8_face()
-    sys.exit(0 if success else 1)
+    sys.exit(main())
