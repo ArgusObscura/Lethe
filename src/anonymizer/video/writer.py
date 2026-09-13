@@ -94,7 +94,7 @@ class VideoWriter:
             frame: Frame as BGR numpy array
 
         Returns:
-            True if write successful, False otherwise
+            True if the writer is still open afterwards, False otherwise
         """
         if frame.shape[:2] != (self.height, self.width):
             logger.warning(
@@ -103,7 +103,11 @@ class VideoWriter:
             )
             frame = cv2.resize(frame, (self.width, self.height))
 
-        return self.writer.write(frame)
+        self.writer.write(frame)
+
+        # cv2's write() returns None and reports no per-frame status, so the
+        # writer staying open is the only signal available.
+        return self.writer.isOpened()
 
     def write_frames(self, frames: list) -> bool:
         """Write multiple frames.

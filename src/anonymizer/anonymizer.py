@@ -12,6 +12,10 @@ from .models.config import AnonymizationMethod, AnonymizationConfig
 class Anonymizer:
     """Apply anonymization techniques to detected objects."""
 
+    # Upper bound on pixelation blocks across a region, so anonymization
+    # strength does not weaken as a face grows on screen.
+    MAX_PIXELATE_BLOCKS = 12
+
     def __init__(self, config: AnonymizationConfig):
         """Initialize anonymizer.
 
@@ -37,13 +41,13 @@ class Anonymizer:
         Returns:
             Anonymized frame
         """
-        result = frame.copy()
-
         if method is None:
             method = self.config.method
 
+        result = frame.copy()
+
         for detection in detections:
-            result = self.anonymize_detection(result, detection, method)
+            self._apply_to_detection(result, detection, method)
 
         return result
 
@@ -66,23 +70,115 @@ class Anonymizer:
         if method is None:
             method = self.config.method
 
-        x1, y1, x2, y2 = int(detection.x1), int(detection.y1), int(detection.x2), int(detection.y2)
+        result = frame.copy()
+        self._apply_to_detection(result, detection, method)
 
-        # Ensure coordinates are within frame bounds
-        x1 = max(0, x1)
-        y1 = max(0, y1)
-        x2 = min(frame.shape[1], x2)
-        y2 = min(frame.shape[0], y2)
+        return result
 
-        if method == AnonymizationMethod.BLUR or method == "blur":
-            return self.blur_region(frame, x1, y1, x2, y2)
-        elif method == AnonymizationMethod.PIXELATE or method == "pixelate":
-            return self.pixelate_region(frame, x1, y1, x2, y2)
+    def _detection_box(
+        self, frame: np.ndarray, detection: Detection
+    ) -> Tuple[int, int, int, int]:
+        """Expand a detection box and clamp it to the frame.
+
+        Detectors return boxes drawn tightly around the feature, which leaves
+        hair, jawline and ear edges outside the anonymized region. Padding the
+        box covers what the detector considered outside the face.
+        """
+        x1, y1 = int(detection.x1), int(detection.y1)
+        x2, y2 = int(detection.x2), int(detection.y2)
+
+        pad = self.config.box_padding
+        if pad:
+            pad_x = int((x2 - x1) * pad)
+            pad_y = int((y2 - y1) * pad)
+            x1, y1 = x1 - pad_x, y1 - pad_y
+            x2, y2 = x2 + pad_x, y2 + pad_y
+
+        return (
+            max(0, x1),
+            max(0, y1),
+            min(frame.shape[1], x2),
+            min(frame.shape[0], y2),
+        )
+
+    def _apply_to_detection(
+        self, frame: np.ndarray, detection: Detection, method: str
+    ) -> None:
+        """Anonymize one detection, modifying ``frame`` in place."""
+        x1, y1, x2, y2 = self._detection_box(frame, detection)
+
+        if method == AnonymizationMethod.PIXELATE or method == "pixelate":
+            self._pixelate_in_place(frame, x1, y1, x2, y2, self.config.pixelate_size)
         elif method == AnonymizationMethod.MASK or method == "mask":
-            return self.mask_region(frame, x1, y1, x2, y2)
+            self._mask_in_place(frame, x1, y1, x2, y2, self.config.mask_color)
         else:
-            logger.warning(f"Unknown anonymization method: {method}, using blur")
-            return self.blur_region(frame, x1, y1, x2, y2)
+            if not (method == AnonymizationMethod.BLUR or method == "blur"):
+                logger.warning(f"Unknown anonymization method: {method}, using blur")
+            self._blur_in_place(frame, x1, y1, x2, y2, self.config.blur_kernel_size)
+
+    def _blur_in_place(
+        self, frame: np.ndarray, x1: int, y1: int, x2: int, y2: int, kernel_size: int
+    ) -> None:
+        """Blur a region with strength proportional to its size.
+
+        A fixed kernel anonymizes weakly exactly where it matters most: a face
+        filling the frame keeps far more identifying structure than a distant
+        one, because the blur radius is unrelated to the feature scale. Sigma
+        therefore scales with the box, using the configured kernel as a floor.
+        """
+        roi = frame[y1:y2, x1:x2]
+
+        if roi.size == 0:
+            return
+
+        height, width = roi.shape[:2]
+        config_sigma = 0.3 * ((kernel_size - 1) * 0.5 - 1) + 0.8
+        sigma = max(config_sigma, max(width, height) / 6.0)
+
+        # ksize (0, 0) lets OpenCV derive the kernel from sigma.
+        frame[y1:y2, x1:x2] = cv2.GaussianBlur(roi, (0, 0), sigma)
+
+    def _pixelate_in_place(
+        self, frame: np.ndarray, x1: int, y1: int, x2: int, y2: int, block_size: int
+    ) -> None:
+        """Pixelate a region, modifying ``frame`` in place.
+
+        A fixed pixel block size has the same flaw as a fixed blur kernel: a
+        500px face keeps 33 blocks across and stays identifiable, while a 20px
+        one collapses to a single block. Capping the block count makes the
+        result equally coarse whatever the face's size on screen.
+        """
+        roi = frame[y1:y2, x1:x2]
+
+        if roi.size == 0:
+            return
+
+        height, width = roi.shape[:2]
+
+        # A region smaller than one block still collapses to a single block;
+        # without the floor the intermediate resize gets a zero dimension.
+        blocks_x = max(1, min(width // block_size, self.MAX_PIXELATE_BLOCKS))
+        blocks_y = max(1, min(height // block_size, self.MAX_PIXELATE_BLOCKS))
+
+        small = cv2.resize(
+            roi, (blocks_x, blocks_y), interpolation=cv2.INTER_LINEAR
+        )
+        frame[y1:y2, x1:x2] = cv2.resize(
+            small, (width, height), interpolation=cv2.INTER_NEAREST
+        )
+
+    def _mask_in_place(
+        self,
+        frame: np.ndarray,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        color: Tuple[int, int, int],
+    ) -> None:
+        """Fill a region with a solid colour, modifying ``frame`` in place."""
+        # Config expresses the colour as RGB; frames are BGR.
+        frame[y1:y2, x1:x2] = tuple(reversed(tuple(color)))
 
     def blur_region(
         self,
@@ -106,18 +202,8 @@ class Anonymizer:
         if kernel_size is None:
             kernel_size = self.config.blur_kernel_size
 
-        # Ensure kernel size is odd
-        if kernel_size % 2 == 0:
-            kernel_size += 1
-
         result = frame.copy()
-        roi = result[y1:y2, x1:x2]
-
-        if roi.size == 0:
-            return result
-
-        blurred = cv2.GaussianBlur(roi, (kernel_size, kernel_size), 0)
-        result[y1:y2, x1:x2] = blurred
+        self._blur_in_place(result, x1, y1, x2, y2, kernel_size)
 
         return result
 
@@ -144,18 +230,7 @@ class Anonymizer:
             block_size = self.config.pixelate_size
 
         result = frame.copy()
-        roi = result[y1:y2, x1:x2]
-
-        if roi.size == 0:
-            return result
-
-        # Downsample
-        h, w = roi.shape[:2]
-        small = cv2.resize(roi, (w // block_size, h // block_size), interpolation=cv2.INTER_LINEAR)
-
-        # Upsample back to original size
-        pixelated = cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
-        result[y1:y2, x1:x2] = pixelated
+        self._pixelate_in_place(result, x1, y1, x2, y2, block_size)
 
         return result
 
@@ -182,7 +257,7 @@ class Anonymizer:
             color = self.config.mask_color
 
         result = frame.copy()
-        result[y1:y2, x1:x2] = color
+        self._mask_in_place(result, x1, y1, x2, y2, color)
 
         return result
 

@@ -624,7 +624,10 @@ def show_config(method: str):
             "method": config.method,
             "blur_kernel_size": config.blur_kernel_size,
             "pixelate_size": config.pixelate_size,
-            "mask_color": config.mask_color,
+            # A tuple would dump as !!python/tuple, which safe_load refuses —
+            # the template this command prints must load back through -c.
+            "mask_color": list(config.mask_color),
+            "box_padding": config.box_padding,
             "enable_face_detection": config.enable_face_detection,
             "enable_license_plate_detection": config.enable_license_plate_detection,
         },
@@ -644,7 +647,7 @@ def show_config(method: str):
         },
     }
 
-    click.echo(yaml.dump(config_dict, default_flow_style=False, sort_keys=False))
+    click.echo(yaml.safe_dump(config_dict, default_flow_style=False, sort_keys=False))
 
 
 @cli.group()

@@ -111,7 +111,7 @@ class TestVideoReader:
 
     def test_reader_context_manager(self, create_test_video):
         """Test using reader as context manager."""
-        video_path = create_test_video("test.mp4")
+        video_path = create_test_video("test.mp4", fps=30, duration=1)
 
         with VideoReader(str(video_path)) as reader:
             assert reader.frame_count == 30
