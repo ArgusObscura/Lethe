@@ -10,7 +10,7 @@ This project and everyone participating in it is governed by our Code of Conduct
 
 ## How Can I Contribute?
 
-### 🐛 Reporting Bugs
+### Reporting Bugs
 
 Before creating bug reports, please check the issue list as you might find out that you don't need to create one. When you are creating a bug report, please include as many details as possible:
 
@@ -22,7 +22,7 @@ Before creating bug reports, please check the issue list as you might find out t
 * **Include screenshots and animated GIFs if possible**
 * **Include your environment details** (OS, Python version, GPU/CPU, etc.)
 
-### ✨ Suggesting Enhancements
+### Suggesting Enhancements
 
 Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, please include:
 
@@ -32,7 +32,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 * **Describe the current behavior and expected behavior**
 * **Explain why this enhancement would be useful**
 
-### 🔧 Pull Requests
+### Pull Requests
 
 * Fill in the required template
 * Follow the Python styleguides
@@ -312,4 +312,4 @@ Feel free to ask questions:
 
 By contributing to Lethe, you agree that your contributions will be licensed under its MIT License.
 
-Thank you for contributing! 🎉
+Thank you for contributing! 
