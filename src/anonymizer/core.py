@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Optional, Callable, Dict
+from datetime import datetime
 from tqdm import tqdm
 from loguru import logger
 
@@ -11,6 +12,7 @@ from .detector import ObjectDetector, Detection
 from .anonymizer import Anonymizer
 from .models.loader import ModelLoader
 from .models.config import AnonymizationConfig, DetectionConfig
+from .events import EventEmitter, EventType, Event, EventCallback
 
 
 class AnonymizationPipeline:
@@ -41,7 +43,23 @@ class AnonymizationPipeline:
             "total_detections": 0,
         }
 
+        # Event system
+        self.events = EventEmitter()
+
         logger.info("AnonymizationPipeline initialized")
+
+    def on(self, event_type: EventType, callback: EventCallback) -> 'AnonymizationPipeline':
+        """Register an event callback.
+
+        Args:
+            event_type: Type of event to listen for
+            callback: Function to call when event occurs
+
+        Returns:
+            Self for method chaining
+        """
+        self.events.on(event_type, callback)
+        return self
 
     def process_video(
         self,
@@ -61,58 +79,124 @@ class AnonymizationPipeline:
         """
         logger.info(f"Starting video anonymization: {input_path} -> {output_path}")
 
-        # Open input video
-        with VideoReader(input_path) as reader:
-            # Initialize output writer
-            writer_class = FFmpegVideoWriter if self.use_ffmpeg else VideoWriter
+        # Emit pipeline started event
+        self.events.emit(Event(
+            event_type=EventType.PIPELINE_STARTED,
+            timestamp=datetime.now(),
+            video_path=input_path,
+        ))
 
-            with writer_class(
-                output_path,
-                reader.fps,
-                reader.width,
-                reader.height,
-                crf=self.config.face_config.batch_size if hasattr(self.config, 'crf') else 23,
-            ) as writer:
+        try:
+            # Open input video
+            with VideoReader(input_path) as reader:
+                # Emit video opened event
+                self.events.emit(Event(
+                    event_type=EventType.VIDEO_OPENED,
+                    timestamp=datetime.now(),
+                    video_path=input_path,
+                    total_frames=reader.frame_count,
+                ))
 
-                # Process frames
-                pbar = tqdm(total=reader.frame_count, desc="Processing video")
+                # Initialize output writer
+                writer_class = FFmpegVideoWriter if self.use_ffmpeg else VideoWriter
 
-                for frame_num, frame in reader.read_frames():
-                    # Detect objects
-                    detections = []
+                with writer_class(
+                    output_path,
+                    reader.fps,
+                    reader.width,
+                    reader.height,
+                    crf=self.config.face_config.batch_size if hasattr(self.config, 'crf') else 23,
+                ) as writer:
 
-                    if self.config.enable_face_detection:
-                        face_detections = self.detector.detect_faces(frame)
-                        detections.extend(face_detections)
-                        self.stats["faces_detected"] += len(face_detections)
+                    # Process frames
+                    pbar = tqdm(total=reader.frame_count, desc="Processing video")
 
-                    if self.config.enable_license_plate_detection:
-                        lp_detections = self.detector.detect_license_plates(frame)
-                        detections.extend(lp_detections)
-                        self.stats["license_plates_detected"] += len(lp_detections)
+                    for frame_num, frame in reader.read_frames():
+                        # Emit frame start event
+                        self.events.emit(Event(
+                            event_type=EventType.FRAME_START,
+                            timestamp=datetime.now(),
+                            frame_number=frame_num,
+                            total_frames=reader.frame_count,
+                        ))
 
-                    self.stats["total_detections"] += len(detections)
+                        # Detect objects
+                        detections = []
 
-                    # Anonymize detections
-                    anonymized_frame = self.anonymizer.anonymize_frame(frame, detections)
+                        if self.config.enable_face_detection:
+                            face_detections = self.detector.detect_faces(frame)
+                            detections.extend(face_detections)
+                            self.stats["faces_detected"] += len(face_detections)
 
-                    # Write frame
-                    writer.write_frame(anonymized_frame)
+                            if face_detections:
+                                self.events.emit(Event(
+                                    event_type=EventType.FACES_DETECTED,
+                                    timestamp=datetime.now(),
+                                    frame_number=frame_num,
+                                    detections={"faces": [d.to_dict() for d in face_detections]},
+                                ))
 
-                    # Update stats and progress
-                    self.stats["frames_processed"] += 1
+                        if self.config.enable_license_plate_detection:
+                            lp_detections = self.detector.detect_license_plates(frame)
+                            detections.extend(lp_detections)
+                            self.stats["license_plates_detected"] += len(lp_detections)
 
-                    if progress_callback:
-                        progress_callback(frame_num, reader.frame_count)
+                            if lp_detections:
+                                self.events.emit(Event(
+                                    event_type=EventType.PLATES_DETECTED,
+                                    timestamp=datetime.now(),
+                                    frame_number=frame_num,
+                                    detections={"license_plates": [d.to_dict() for d in lp_detections]},
+                                ))
 
-                    pbar.update(1)
+                        self.stats["total_detections"] += len(detections)
 
-                pbar.close()
+                        # Anonymize detections
+                        anonymized_frame = self.anonymizer.anonymize_frame(frame, detections)
 
-        logger.info(f"Video processing complete. Output: {output_path}")
-        logger.info(f"Statistics: {self.stats}")
+                        # Write frame
+                        writer.write_frame(anonymized_frame)
 
-        return self.stats
+                        # Update stats and progress
+                        self.stats["frames_processed"] += 1
+
+                        if progress_callback:
+                            progress_callback(frame_num, reader.frame_count)
+
+                        # Emit frame completed event
+                        self.events.emit(Event(
+                            event_type=EventType.FRAME_COMPLETED,
+                            timestamp=datetime.now(),
+                            frame_number=frame_num,
+                            total_frames=reader.frame_count,
+                            progress=(frame_num / reader.frame_count) * 100,
+                        ))
+
+                        pbar.update(1)
+
+                    pbar.close()
+
+            logger.info(f"Video processing complete. Output: {output_path}")
+            logger.info(f"Statistics: {self.stats}")
+
+            # Emit pipeline completed event
+            self.events.emit(Event(
+                event_type=EventType.PIPELINE_COMPLETED,
+                timestamp=datetime.now(),
+                metadata=self.stats,
+            ))
+
+            return self.stats
+
+        except Exception as e:
+            logger.error(f"Pipeline failed: {e}")
+            # Emit pipeline failed event
+            self.events.emit(Event(
+                event_type=EventType.PIPELINE_FAILED,
+                timestamp=datetime.now(),
+                error=str(e),
+            ))
+            raise
 
     def process_frame(self, frame_path: str, output_path: str) -> Dict:
         """Process a single image frame.

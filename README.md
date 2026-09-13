@@ -91,10 +91,11 @@ pip install -e .
 
 ### Basic Usage
 
-#### Python Library (Phase 1 - Ready Now)
+#### Python Library (Phase 1 & 3 - Ready Now)
 
 ```python
 from anonymizer import AnonymizationPipeline, AnonymizationConfig
+from anonymizer.events import EventType, EventLogger, EventStats
 
 # Create configuration
 config = AnonymizationConfig(
@@ -107,12 +108,25 @@ config = AnonymizationConfig(
 # Initialize pipeline
 pipeline = AnonymizationPipeline(config)
 
-# Process video
-stats = pipeline.process_video("input_video.mp4", "output_video.mp4")
+# Optional: Set up event monitoring (Phase 3)
+logger = EventLogger(verbose=True)
+stats = EventStats()
 
-print(f"Processed {stats['frames_processed']} frames")
-print(f"Detected {stats['faces_detected']} faces")
-print(f"Detected {stats['license_plates_detected']} license plates")
+pipeline.on(EventType.PIPELINE_STARTED, logger)
+pipeline.on(EventType.FACES_DETECTED, lambda e: (logger(e), stats(e)))
+pipeline.on(EventType.PLATES_DETECTED, lambda e: (logger(e), stats(e)))
+pipeline.on(EventType.FRAME_COMPLETED, stats)
+pipeline.on(EventType.PIPELINE_COMPLETED, lambda e: (logger(e), stats(e)))
+
+# Process video
+results = pipeline.process_video("input_video.mp4", "output_video.mp4")
+
+# Get detailed statistics
+summary = stats.get_summary()
+print(f"Processed {summary['processed_frames']} frames")
+print(f"Detected {summary['total_faces']} faces")
+print(f"Detected {summary['total_plates']} plates")
+print(f"Duration: {summary['duration_seconds']:.2f}s")
 ```
 
 #### Command Line (Phase 2 - In Development)
@@ -192,6 +206,74 @@ config = AnonymizationConfig(
 - Solid color replacement
 - Removes all visual information
 - Reversibility: None (irreversible)
+
+---
+
+## Event Callbacks (Phase 3)
+
+Monitor processing in real-time with event callbacks. The pipeline emits events at key stages:
+
+### Event Types
+- **Pipeline lifecycle**: `PIPELINE_STARTED`, `PIPELINE_COMPLETED`, `PIPELINE_FAILED`
+- **Video processing**: `VIDEO_OPENED`, `VIDEO_CLOSED`
+- **Frame processing**: `FRAME_START`, `FRAME_COMPLETED`, `FRAME_FAILED`
+- **Detection**: `FACES_DETECTED`, `PLATES_DETECTED`
+- **Batch processing**: `BATCH_STARTED`, `BATCH_COMPLETED`, `BATCH_VIDEO_STARTED`, `BATCH_VIDEO_COMPLETED`
+
+### Usage Examples
+
+**Basic Progress Logging:**
+```python
+from anonymizer import AnonymizationPipeline
+from anonymizer.events import EventType, EventLogger
+
+pipeline = AnonymizationPipeline()
+logger = EventLogger(verbose=True)
+
+pipeline.on(EventType.PIPELINE_STARTED, logger)
+pipeline.on(EventType.FRAME_COMPLETED, logger)
+pipeline.on(EventType.PIPELINE_COMPLETED, logger)
+
+pipeline.process_video("input.mp4", "output.mp4")
+```
+
+**Custom Progress Bar:**
+```python
+def show_progress(event):
+    if event.progress_percent is not None:
+        bar_length = 50
+        filled = int(bar_length * event.progress_percent / 100)
+        bar = "█" * filled + "░" * (bar_length - filled)
+        print(f"\r[{bar}] {event.progress_percent:.1f}%", end="", flush=True)
+
+pipeline.on(EventType.FRAME_COMPLETED, show_progress)
+```
+
+**Collect Statistics:**
+```python
+from anonymizer.events import EventStats
+
+stats = EventStats()
+pipeline.on(EventType.FACES_DETECTED, stats)
+pipeline.on(EventType.PLATES_DETECTED, stats)
+pipeline.on(EventType.FRAME_COMPLETED, stats)
+pipeline.on(EventType.PIPELINE_COMPLETED, stats)
+
+pipeline.process_video("input.mp4", "output.mp4")
+summary = stats.get_summary()
+print(f"Total detections: {summary['total_detections']}")
+```
+
+**Method Chaining:**
+```python
+pipeline = (AnonymizationPipeline(config)
+    .on(EventType.PIPELINE_STARTED, lambda e: print("Starting..."))
+    .on(EventType.FACES_DETECTED, lambda e: print(f"Found {len(e.detections['faces'])} faces"))
+    .on(EventType.PIPELINE_COMPLETED, lambda e: print("Done!"))
+)
+```
+
+For more examples, see [examples/event_callbacks.py](examples/event_callbacks.py).
 
 ---
 
@@ -326,7 +408,7 @@ pytest tests/unit/test_anonymizer.py -v
 pytest tests/unit/test_video.py::TestVideoReader -v
 ```
 
-**Current Status**: 24 unit tests, all passing 
+**Current Status**: 37 unit tests (24 core + 13 events), all passing 
 
 ---
 
@@ -352,12 +434,18 @@ pytest tests/unit/test_video.py::TestVideoReader -v
 - [ ] Logging and debugging
 - [ ] Integration tests
 
-### Phase 3: Python Library Refinement
-- [ ] Public API finalization
-- [ ] Event callbacks/hooks
+### Phase 3: Event-Driven Architecture (IN PROGRESS)
+- [x] Event system infrastructure (EventType, Event, EventEmitter)
+- [x] Event callbacks/hooks with method chaining
+- [x] EventLogger for console logging
+- [x] EventStats for statistics collection
+- [x] 20+ event types (pipeline, video, frame, detection, batch)
+- [x] Integration with process_video() for full event emission
+- [x] Comprehensive event examples and documentation
+- [x] Unit tests for event system (13 tests)
+- [ ] CLI integration with event progress display
 - [ ] Streaming support
-- [ ] Example notebooks
-- [ ] Advanced configuration guide
+- [ ] Advanced configuration hooks
 
 ### Phase 4: REST API Service
 - [ ] FastAPI server
