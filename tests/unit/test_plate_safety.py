@@ -30,14 +30,22 @@ class TestPlateModelRecognition:
 
 
 class TestDefaults:
-    def test_plate_detection_is_off_by_default(self):
-        """On by default, the bundled model anonymizes every object it knows."""
-        assert AnonymizationConfig().enable_license_plate_detection is False
+    def test_both_detectors_are_on_by_default(self):
+        config = AnonymizationConfig()
 
-    def test_face_detection_remains_on_by_default(self):
-        assert AnonymizationConfig().enable_face_detection is True
-
-    def test_plate_detection_can_still_be_enabled(self):
-        config = AnonymizationConfig(enable_license_plate_detection=True)
-
+        assert config.enable_face_detection is True
         assert config.enable_license_plate_detection is True
+
+    def test_plate_detection_can_be_disabled(self):
+        config = AnonymizationConfig(enable_license_plate_detection=False)
+
+        assert config.enable_license_plate_detection is False
+
+
+class TestMissingModel:
+    def test_absent_plate_model_names_the_fix(self, tmp_path):
+        """Silently falling back to a general-purpose model is how this broke."""
+        loader = ModelLoader(cache_dir=str(tmp_path))
+
+        with pytest.raises(FileNotFoundError, match="download_models.py"):
+            loader.load_license_plate_detector()
