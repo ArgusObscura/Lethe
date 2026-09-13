@@ -1,0 +1,45 @@
+# Core dependencies
+python-dotenv==1.0.0
+
+# Computer Vision & ML
+opencv-python==4.8.1.78
+opencv-contrib-python==4.8.1.78
+torch==2.1.1
+torchvision==0.16.1
+ultralytics==8.0.208
+
+# Video processing
+ffmpeg-python==0.2.1
+
+# CLI & API
+click==8.1.7
+typer==0.9.0
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+
+# Data handling & config
+pydantic==2.5.0
+pydantic-settings==2.1.0
+pyyaml==6.0.1
+
+# Utilities
+numpy==1.26.2
+tqdm==4.67.0
+Pillow==10.1.0
+loguru==0.7.2
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+
+# Documentation
+mkdocs==1.5.3
+mkdocs-material==9.4.14
+
+# Development
+black==23.12.0
+flake8==6.1.0
+isort==5.13.2
+mypy==1.7.1
