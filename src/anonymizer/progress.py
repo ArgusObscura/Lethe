@@ -75,6 +75,30 @@ class ProgressDisplay:
                 bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
             )
 
+    def on_stream_opened(self, event: Event) -> None:
+        """Handle stream opened event.
+
+        A live stream has no known length, so the bar counts frames and rate
+        instead of showing completion.
+        """
+        self._log_event(event)
+        self.total_frames = event.total_frames or 0
+
+        if self.quiet:
+            return
+
+        meta = event.metadata or {}
+        if event.total_frames:
+            print(f"📡 Stream: {event.total_frames} frames @ {meta.get('fps', '?')} fps")
+        else:
+            print(f"📡 Stream: live @ {meta.get('fps', '?')} fps (Ctrl-C to stop)")
+
+        self.pbar = tqdm(
+            total=event.total_frames or None,
+            desc="Streaming",
+            unit="frame",
+        )
+
     def on_frame_completed(self, event: Event) -> None:
         """Handle frame completed event."""
         self.frames_processed += 1
@@ -174,7 +198,10 @@ class ProgressDisplay:
         print("✅ PROCESSING COMPLETE")
         print("=" * 70)
         print(f"\n📊 Statistics:")
-        print(f"   Frames processed:  {self.frames_processed}/{self.total_frames}")
+        processed = str(self.frames_processed)
+        if self.total_frames:
+            processed += f"/{self.total_frames}"
+        print(f"   Frames processed:  {processed}")
         print(f"   Faces detected:    {self.total_faces}")
         print(f"   Plates detected:   {self.total_plates}")
         print(f"   Total detections:  {self.total_detections}")

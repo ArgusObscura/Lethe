@@ -22,6 +22,10 @@ class EventType(str, Enum):
     VIDEO_OPENED = "video_opened"
     VIDEO_CLOSED = "video_closed"
 
+    # Stream processing
+    STREAM_OPENED = "stream_opened"
+    STREAM_CLOSED = "stream_closed"
+
     # Frame processing
     FRAME_START = "frame_start"
     FRAME_DETECTED = "frame_detected"
