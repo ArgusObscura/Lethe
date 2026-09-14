@@ -100,8 +100,7 @@ def cli():
 @click.option(
     "--confidence",
     type=float,
-    default=0.5,
-    help="Detection confidence threshold 0-1 [default: 0.5]"
+    help="Detection confidence threshold 0-1 [default: from config]"
 )
 @click.option(
     "--faces/--no-faces",
@@ -167,7 +166,7 @@ def process(
     blur_kernel: int,
     pixelate_size: int,
     mask_color: str,
-    confidence: float,
+    confidence: Optional[float],
     faces: bool,
     plates: bool,
     device: str,
@@ -199,6 +198,14 @@ def process(
         except ValueError as e:
             raise click.BadParameter(f"Invalid color format: {e}")
 
+        # Only pass through what was actually given, so unset options keep
+        # the model's own defaults rather than a duplicate held by the CLI.
+        detection_overrides = {}
+        if confidence is not None:
+            detection_overrides["confidence_threshold"] = confidence
+        if inference_size is not None:
+            detection_overrides["inference_size"] = inference_size
+
         # Create configuration
         if config:
             # Load from YAML config
@@ -218,15 +225,9 @@ def process(
                 track_detections=not no_tracking,
                 detect_every=detect_every,
                 person_gate=not no_person_gate,
-                face_config=DetectionConfig(
-                    confidence_threshold=confidence,
-                    device=device,
-                    inference_size=inference_size,
-                ),
+                face_config=DetectionConfig(device=device, **detection_overrides),
                 license_plate_config=DetectionConfig(
-                    confidence_threshold=confidence,
-                    device=device,
-                    inference_size=inference_size,
+                    device=device, **detection_overrides
                 ),
             )
 
@@ -306,8 +307,7 @@ def process(
 @click.option(
     "--confidence",
     type=float,
-    default=0.5,
-    help="Detection confidence threshold 0-1 [default: 0.5]"
+    help="Detection confidence threshold 0-1 [default: from config]"
 )
 @click.option(
     "--faces/--no-faces",
@@ -346,7 +346,7 @@ def stream(
     method: str,
     max_frames: Optional[int],
     max_seconds: Optional[float],
-    confidence: float,
+    confidence: Optional[float],
     faces: bool,
     plates: bool,
     device: str,
@@ -368,6 +368,11 @@ def stream(
 
         lethe stream http://localhost:8000/mjpeg -o output.mp4 --max-frames 500
     """
+    detection_overrides = {}
+    if confidence is not None:
+        detection_overrides["confidence_threshold"] = confidence
+    if inference_size is not None:
+        detection_overrides["inference_size"] = inference_size
     try:
         from .models.config import DetectionConfig
 
@@ -376,12 +381,10 @@ def stream(
             enable_face_detection=faces,
             enable_license_plate_detection=plates,
             face_config=DetectionConfig(
-                confidence_threshold=confidence,
-                device=device,
+                device=device, **detection_overrides
             ),
             license_plate_config=DetectionConfig(
-                confidence_threshold=confidence,
-                device=device,
+                device=device, **detection_overrides
             ),
         )
 
@@ -444,8 +447,7 @@ def stream(
 @click.option(
     "--confidence",
     type=float,
-    default=0.5,
-    help="Detection confidence threshold [default: 0.5]"
+    help="Detection confidence threshold [default: from config]"
 )
 @click.option(
     "--device",
@@ -467,7 +469,7 @@ def batch(
     input_directory: str,
     output: str,
     method: str,
-    confidence: float,
+    confidence: Optional[float],
     device: str,
     config: Optional[dict],
     pattern: str,
@@ -480,6 +482,9 @@ def batch(
 
         lethe batch videos/ -o anon/ --pattern "*.mp4" --method pixelate
     """
+    detection_overrides = {}
+    if confidence is not None:
+        detection_overrides["confidence_threshold"] = confidence
     try:
         input_dir = Path(input_directory)
         output_dir = Path(output)
@@ -504,12 +509,10 @@ def batch(
             anonymization_config = AnonymizationConfig(
                 method=method,
                 face_config=DetectionConfig(
-                    confidence_threshold=confidence,
-                    device=device,
+                    device=device, **detection_overrides
                 ),
                 license_plate_config=DetectionConfig(
-                    confidence_threshold=confidence,
-                    device=device,
+                    device=device, **detection_overrides
                 ),
             )
 
@@ -565,8 +568,7 @@ def batch(
 @click.option(
     "--confidence",
     type=float,
-    default=0.5,
-    help="Detection confidence threshold [default: 0.5]"
+    help="Detection confidence threshold [default: from config]"
 )
 @click.option(
     "--device",
@@ -574,7 +576,7 @@ def batch(
     default="cpu",
     help="Processing device [default: cpu]"
 )
-def detect(image_path: str, confidence: float, device: str):
+def detect(image_path: str, confidence: Optional[float], device: str):
     """Detect objects in an image without anonymization.
 
     Useful for testing detection accuracy and visualizing detected regions.
@@ -590,12 +592,10 @@ def detect(image_path: str, confidence: float, device: str):
 
         config = AnonymizationConfig(
             face_config=DetectionConfig(
-                confidence_threshold=confidence,
-                device=device,
+                device=device, **detection_overrides
             ),
             license_plate_config=DetectionConfig(
-                confidence_threshold=confidence,
-                device=device,
+                device=device, **detection_overrides
             ),
         )
 
@@ -709,8 +709,7 @@ def job():
 @click.option(
     "--confidence",
     type=float,
-    default=0.5,
-    help="Detection confidence threshold 0-1 [default: 0.5]"
+    help="Detection confidence threshold 0-1 [default: from config]"
 )
 @click.option("--faces/--no-faces", default=True, help="Enable face detection")
 @click.option("--plates/--no-plates", default=True, help="Enable license plate detection")
@@ -724,20 +723,23 @@ def job_queue(
     input_video: str,
     output: str,
     method: str,
-    confidence: float,
+    confidence: Optional[float],
     faces: bool,
     plates: bool,
     device: str,
 ):
     """Add a video to the processing queue."""
+    detection_overrides = {}
+    if confidence is not None:
+        detection_overrides["confidence_threshold"] = confidence
     from .models.config import DetectionConfig
 
     config = AnonymizationConfig(
         method=method,
         enable_face_detection=faces,
         enable_license_plate_detection=plates,
-        face_config=DetectionConfig(confidence_threshold=confidence, device=device),
-        license_plate_config=DetectionConfig(confidence_threshold=confidence, device=device),
+        face_config=DetectionConfig(device=device, **detection_overrides),
+        license_plate_config=DetectionConfig(device=device, **detection_overrides),
     )
 
     queued = BatchManager().queue_job(input_video, output, config)

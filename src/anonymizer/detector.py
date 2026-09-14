@@ -151,9 +151,42 @@ class ObjectDetector:
         ]
 
     @staticmethod
-    def _size_kwargs(config) -> dict:
-        """Inference size for a model call, omitted when left at the default."""
-        return {"imgsz": config.inference_size} if config.inference_size else {}
+    def _size_kwargs(config, frames=None) -> dict:
+        """Inference size for a model call.
+
+        An explicit ``inference_size`` wins. Otherwise it follows the footage's
+        own width, because a detector's usual 640 default silently downscales
+        anything larger — on 1280px dashcam footage that halves every face, and
+        on 2730px footage it shrinks a 50px face to 12px.
+        """
+        if config.inference_size:
+            return {"imgsz": config.inference_size}
+
+        if not frames:
+            return {}
+
+        width = frames[0].shape[1] if hasattr(frames[0], "shape") else None
+        if not width:
+            return {}
+
+        return {"imgsz": ObjectDetector.auto_inference_size(width)}
+
+    # Above this, the cost stops buying enough recall to be worth paying by
+    # default; raise inference_size explicitly for very high resolution work.
+    MAX_AUTO_INFERENCE_SIZE = 1920
+    MIN_AUTO_INFERENCE_SIZE = 640
+
+    @staticmethod
+    def auto_inference_size(frame_width: int) -> int:
+        """Inference size to use for footage of this width.
+
+        Rounded up to a multiple of 32, which is the stride YOLO expects.
+        """
+        size = max(
+            ObjectDetector.MIN_AUTO_INFERENCE_SIZE,
+            min(int(frame_width), ObjectDetector.MAX_AUTO_INFERENCE_SIZE),
+        )
+        return ((size + 31) // 32) * 32
 
     @staticmethod
     def _to_detections(result, class_name: str) -> List[Detection]:
@@ -199,7 +232,7 @@ class ObjectDetector:
         model = self._load_face_model()
 
         try:
-            results = model(frame, conf=self.config.confidence_threshold, **self._size_kwargs(self.config))
+            results = model(frame, conf=self.config.confidence_threshold, **self._size_kwargs(self.config, [frame]))
             detections = [
                 d for result in results for d in self._to_detections(result, "face")
             ]
@@ -223,7 +256,7 @@ class ObjectDetector:
         model = self._load_face_model()
 
         try:
-            results = model(frames, conf=self.config.confidence_threshold, **self._size_kwargs(self.config))
+            results = model(frames, conf=self.config.confidence_threshold, **self._size_kwargs(self.config, frames))
             return [self._to_detections(result, "face") for result in results]
 
         except Exception as e:
@@ -296,7 +329,7 @@ class ObjectDetector:
             results = model(
                 frames,
                 conf=self.license_plate_config.confidence_threshold,
-                **self._size_kwargs(self.license_plate_config),
+                **self._size_kwargs(self.license_plate_config, frames),
             )
             return [
                 self._to_detections(result, "license_plate") for result in results
@@ -321,7 +354,7 @@ class ObjectDetector:
             results = model(
                 frame,
                 conf=self.license_plate_config.confidence_threshold,
-                **self._size_kwargs(self.license_plate_config),
+                **self._size_kwargs(self.license_plate_config, [frame]),
             )
             detections = []
 

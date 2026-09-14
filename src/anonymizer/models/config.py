@@ -22,10 +22,15 @@ class DetectionConfig(BaseModel):
     """Configuration for object detection."""
 
     confidence_threshold: float = Field(
-        default=0.5,
+        default=0.35,
         ge=0.0,
         le=1.0,
-        description="Confidence threshold for detections (0-1)"
+        description=(
+            "Confidence threshold for detections (0-1). Lower than a detector's "
+            "usual default: missing a face is a privacy failure, while an extra "
+            "blurred patch is cosmetic, and person gating removes the large "
+            "false positives that a low threshold would otherwise admit."
+        )
     )
     iou_threshold: float = Field(
         default=0.4,
@@ -46,11 +51,11 @@ class DetectionConfig(BaseModel):
         default=None,
         gt=0,
         description=(
-            "Longest edge the detector sees, in pixels (YOLO's default is 640). "
-            "Frames are scaled to this before detection, so on high-resolution "
-            "footage a low value shrinks distant faces below what the model can "
-            "resolve. Raising it finds more faces and costs proportionally more "
-            "time."
+            "Longest edge the detector sees, in pixels. Left unset it follows "
+            "the frame width, capped at MAX_AUTO_INFERENCE_SIZE. Frames are "
+            "scaled to this before detection, so a value below the footage's "
+            "own resolution shrinks distant faces below what the model can "
+            "resolve. Set it explicitly to trade recall against time."
         )
     )
 
