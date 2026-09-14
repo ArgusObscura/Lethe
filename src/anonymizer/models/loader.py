@@ -23,9 +23,10 @@ from loguru import logger  # noqa: E402
 class ModelLoader:
     """Load and cache detection models."""
 
-    # Default model paths
-    YOLOV8_FACE_MODEL = "yolov8n-face.pt"  # Specialized YOLOv8 for face detection
-    YOLOV8_LP_MODEL = "yolov8m.pt"  # Generic YOLOv8, fine-tune for LP detection
+    # Both are single-class detectors trained for exactly one job, rather than
+    # general-purpose models whose every class would be anonymized.
+    YOLOV8_FACE_MODEL = "yolov8n-face.pt"
+    LICENSE_PLATE_MODEL = "license-plate.pt"
 
     def __init__(self, cache_dir: Optional[str] = None):
         """Initialize model loader.
@@ -111,27 +112,34 @@ class ModelLoader:
         if model_name in self._models:
             return self._models[model_name]
 
-        logger.info("Loading YOLOv8 model for license plate detection...")
+        logger.info("Loading license plate detection model...")
+
+        model_path = self.cache_dir / self.LICENSE_PLATE_MODEL
+
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"License plate model not found at {model_path}. "
+                f"Download it with: python3 download_models.py"
+            )
+
         try:
-            # Use cache directory and set YOLO to download there
-            os.environ['YOLO_CACHE'] = str(self.cache_dir)
-            model = YOLO(self.YOLOV8_LP_MODEL)
+            model = YOLO(str(model_path))
             model.to(device)
             self._models[model_name] = model
-
-            if not self._detects_license_plates(model):
-                logger.warning(
-                    f"{self.YOLOV8_LP_MODEL} has no license plate class, so every "
-                    f"object it detects ({', '.join(list(model.names.values())[:4])}, "
-                    f"...) will be anonymized as a plate. Point "
-                    f"license_plate_model at a plate detector, or disable plate "
-                    f"detection."
-                )
-
-            return model
         except Exception as e:
             logger.error(f"Failed to load license plate detector: {e}")
             raise
+
+        if not self._detects_license_plates(model):
+            logger.warning(
+                f"{model_path.name} has no license plate class, so every object "
+                f"it detects ({', '.join(list(model.names.values())[:4])}, ...) "
+                f"will be anonymized as a plate."
+            )
+        else:
+            logger.info("License plate detector loaded successfully")
+
+        return model
 
     def load_custom_model(self, model_path: str, device: str = "cpu") -> YOLO:
         """Load a custom YOLO model.
