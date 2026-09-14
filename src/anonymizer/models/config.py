@@ -2,7 +2,7 @@
 
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AnonymizationMethod(str, Enum):
@@ -83,6 +83,15 @@ class AnonymizationConfig(BaseModel):
             "Without it every dropout leaks an unblurred frame."
         )
     )
+    detect_every: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Run detection only every Nth frame and let tracking cover the rest. "
+            "Inference dominates runtime, so this divides it directly, at the "
+            "cost of recall on anything moving fast. Requires track_detections."
+        )
+    )
     track_persistence: int = Field(
         default=10,
         ge=0,
@@ -125,6 +134,16 @@ class AnonymizationConfig(BaseModel):
         default=True,
         description="Apply temporal smoothing to detection boxes"
     )
+
+    @model_validator(mode="after")
+    def _skipping_requires_tracking(self) -> "AnonymizationConfig":
+        """Skipping frames without tracking would anonymize only every Nth one."""
+        if self.detect_every > 1 and not self.track_detections:
+            raise ValueError(
+                "detect_every > 1 needs track_detections enabled, otherwise "
+                "frames between detections are left unanonymized"
+            )
+        return self
 
     class Config:
         use_enum_values = True
