@@ -141,6 +141,11 @@ def cli():
     help="Run detection every Nth frame, tracking covers the rest [default: 1]"
 )
 @click.option(
+    "--no-person-gate",
+    is_flag=True,
+    help="Allow large face detections that are not on a detected person"
+)
+@click.option(
     "--log",
     is_flag=True,
     help="Enable event logging to file"
@@ -170,6 +175,7 @@ def process(
     inference_size: Optional[int],
     no_tracking: bool,
     detect_every: int,
+    no_person_gate: bool,
     log: bool,
     log_file: Optional[str],
     quiet: bool,
@@ -211,6 +217,7 @@ def process(
                 enable_license_plate_detection=plates,
                 track_detections=not no_tracking,
                 detect_every=detect_every,
+                person_gate=not no_person_gate,
                 face_config=DetectionConfig(
                     confidence_threshold=confidence,
                     device=device,

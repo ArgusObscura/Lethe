@@ -92,8 +92,63 @@ class ObjectDetector:
 
         self.face_model = None
         self.lp_model = None
+        self.person_model = None
+
+        # People are far larger than faces, so confirming one needs much less
+        # resolution than finding a face does.
+        self.person_confidence = 0.3
+        self.person_inference_size = 960
 
         logger.info("ObjectDetector initialized")
+
+    @staticmethod
+    def gate_faces_by_person(
+        faces: List[Detection],
+        persons: List[Detection],
+        min_size: int,
+        min_overlap: float = 0.6,
+    ) -> List[Detection]:
+        """Drop large face detections that do not sit on a detected person.
+
+        The face model reads car rear ends, wheels and windscreen reflections
+        as faces — two lights and a plate make a convincing arrangement — and
+        does so confidently, so a confidence threshold cannot separate them.
+        Those false positives are large; real distant faces are not.
+
+        Small detections pass through ungated: the person detector is
+        unreliable at that distance, and a spurious few-pixel blur costs far
+        less than dropping a real face.
+
+        Args:
+            faces: Face detections for one frame.
+            persons: Person detections for the same frame.
+            min_size: Width in pixels at or above which person support is
+                required.
+            min_overlap: Fraction of the face box that must fall inside a
+                person box.
+
+        Returns:
+            The face detections that survive gating.
+        """
+        def supported(face: Detection) -> bool:
+            area = (face.x2 - face.x1) * (face.y2 - face.y1)
+            if area <= 0:
+                return False
+
+            for person in persons:
+                ix1, iy1 = max(face.x1, person.x1), max(face.y1, person.y1)
+                ix2, iy2 = min(face.x2, person.x2), min(face.y2, person.y2)
+                overlap = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                if overlap / area >= min_overlap:
+                    return True
+
+            return False
+
+        return [
+            face
+            for face in faces
+            if (face.x2 - face.x1) < min_size or supported(face)
+        ]
 
     @staticmethod
     def _size_kwargs(config) -> dict:
@@ -174,6 +229,55 @@ class ObjectDetector:
         except Exception as e:
             logger.error(f"Batched face detection failed: {e}")
             return [[] for _ in frames]
+
+    def detect_persons_batch(self, frames: List[np.ndarray]) -> List[List[Detection]]:
+        """Detect people across several frames.
+
+        Used to confirm that a face detection sits on a person. People are far
+        larger than faces, so this runs at a lower resolution than the face
+        pass.
+
+        Args:
+            frames: Input frames (BGR)
+
+        Returns:
+            One list of person Detections per input frame.
+        """
+        if self.person_model is None:
+            self.person_model = self.loader.load_person_detector(self.config.device)
+
+        try:
+            results = self.person_model(
+                frames,
+                conf=self.person_confidence,
+                imgsz=self.person_inference_size,
+            )
+            return [self._persons_only(result) for result in results]
+        except Exception as e:
+            logger.error(f"Person detection failed: {e}")
+            return [[] for _ in frames]
+
+    @staticmethod
+    def _persons_only(result) -> List[Detection]:
+        """Keep just the person class out of a COCO result."""
+        detections = []
+
+        for box in result.boxes:
+            if result.names[int(box.cls[0])] != "person":
+                continue
+            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+            detections.append(
+                Detection(
+                    x1=int(x1),
+                    y1=int(y1),
+                    x2=int(x2),
+                    y2=int(y2),
+                    confidence=float(box.conf[0].cpu().numpy()),
+                    class_name="person",
+                )
+            )
+
+        return detections
 
     def detect_license_plates_batch(
         self, frames: List[np.ndarray]

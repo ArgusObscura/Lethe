@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from anonymizer.core import AnonymizationPipeline
-from anonymizer.detector import Detection
+from anonymizer.detector import Detection, ObjectDetector
 from anonymizer.models.config import AnonymizationConfig
 
 
@@ -15,9 +15,15 @@ def frame():
 class RecordingDetector:
     """Counts how many frames were actually handed to the model."""
 
+    # Real gating logic, so these tests exercise the production path.
+    # staticmethod(), or assigning it here would rebind it as an instance
+    # method and pass the detector in as the first argument.
+    gate_faces_by_person = staticmethod(ObjectDetector.gate_faces_by_person)
+
     def __init__(self):
         self.faces_seen = 0
         self.plates_seen = 0
+        self.persons_seen = 0
 
     def detect_faces_batch(self, frames):
         self.faces_seen += len(frames)
@@ -26,6 +32,10 @@ class RecordingDetector:
 
     def detect_license_plates_batch(self, frames):
         self.plates_seen += len(frames)
+        return [[] for _ in frames]
+
+    def detect_persons_batch(self, frames):
+        self.persons_seen += len(frames)
         return [[] for _ in frames]
 
 

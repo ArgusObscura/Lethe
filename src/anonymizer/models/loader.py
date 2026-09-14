@@ -23,10 +23,14 @@ from loguru import logger  # noqa: E402
 class ModelLoader:
     """Load and cache detection models."""
 
-    # Both are single-class detectors trained for exactly one job, rather than
-    # general-purpose models whose every class would be anonymized.
+    # Face and plate are single-class detectors trained for exactly one job,
+    # rather than general-purpose models whose every class would be anonymized.
     YOLOV8_FACE_MODEL = "yolov8n-face.pt"
     LICENSE_PLATE_MODEL = "license-plate.pt"
+
+    # The exception: a COCO model, used only for its person class, to confirm
+    # that a large face detection really is on a person.
+    PERSON_MODEL = "yolov8n.pt"
 
     def __init__(self, cache_dir: Optional[str] = None):
         """Initialize model loader.
@@ -140,6 +144,36 @@ class ModelLoader:
             logger.info("License plate detector loaded successfully")
 
         return model
+
+    def load_person_detector(self, device: str = "cpu") -> YOLO:
+        """Load the COCO model used to confirm a face belongs to a person.
+
+        Args:
+            device: Device to load model on ('cpu' or 'cuda')
+
+        Returns:
+            YOLO model whose person class gates face detections
+        """
+        model_name = "person_detector"
+
+        if model_name in self._models:
+            return self._models[model_name]
+
+        logger.info("Loading person detection model...")
+
+        cached = self.cache_dir / self.PERSON_MODEL
+        source = str(cached) if cached.exists() else self.PERSON_MODEL
+
+        try:
+            os.environ['YOLO_CACHE'] = str(self.cache_dir)
+            model = YOLO(source)
+            model.to(device)
+            self._models[model_name] = model
+            logger.info("Person detector loaded successfully")
+            return model
+        except Exception as e:
+            logger.error(f"Failed to load person detector: {e}")
+            raise
 
     def load_custom_model(self, model_path: str, device: str = "cpu") -> YOLO:
         """Load a custom YOLO model.
