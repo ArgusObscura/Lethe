@@ -76,6 +76,24 @@ class AnonymizationConfig(BaseModel):
         default=(0, 0, 0),
         description="RGB color for masking (black by default)"
     )
+    person_gate: bool = Field(
+        default=True,
+        description=(
+            "Require large face detections to sit on a detected person. The "
+            "face model reads car rears, wheels and windscreen reflections as "
+            "faces, confidently enough that a confidence threshold cannot "
+            "separate them."
+        )
+    )
+    person_gate_min_size: int = Field(
+        default=60,
+        gt=0,
+        description=(
+            "Face box width in pixels at or above which person support is "
+            "required. Below it detections pass through ungated, since the "
+            "person detector is unreliable at that distance."
+        )
+    )
     track_detections: bool = Field(
         default=True,
         description=(

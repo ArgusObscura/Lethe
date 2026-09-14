@@ -85,6 +85,26 @@ class AnonymizationPipeline:
         self.events.on(event_type, callback)
         return self
 
+    def _detect_faces_gated(self, frames):
+        """Detect faces across a batch, discarding ones not on a person.
+
+        Returns:
+            One list of face Detections per input frame.
+        """
+        faces_per_frame = self.detector.detect_faces_batch(frames)
+
+        if not self.config.person_gate:
+            return faces_per_frame
+
+        persons_per_frame = self.detector.detect_persons_batch(frames)
+
+        return [
+            self.detector.gate_faces_by_person(
+                faces, persons, self.config.person_gate_min_size
+            )
+            for faces, persons in zip(faces_per_frame, persons_per_frame)
+        ]
+
     def _detect_batch(self, batch):
         """Detect over a batch, skipping frames covered by tracking.
 
@@ -109,7 +129,7 @@ class AnonymizationPipeline:
             return per_frame
 
         return (
-            run(self.detector.detect_faces_batch, self.config.enable_face_detection),
+            run(self._detect_faces_gated, self.config.enable_face_detection),
             run(
                 self.detector.detect_license_plates_batch,
                 self.config.enable_license_plate_detection,
